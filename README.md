@@ -1,3 +1,3 @@
 # Tools
 
-My directory for useful tools on the Sherlock supercomputer
+teMy directory for useful tools on the Sherlock supercomputer
