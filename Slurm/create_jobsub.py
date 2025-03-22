@@ -41,6 +41,9 @@ def create_jobsubCROCO(job_name,time,cpus,config):
         f.write(f"\n")
         
         # Create directory
+        f.write(f"if [ ! -d \"$SCRATCH/{config}\" ]; then\n")
+        f.write(f"  mkdir $SCRATCH/{config}\n")
+        f.write(f"fi\n")
         f.write(f"mkdir $workdir\n")
         f.write(f"\n")
         
@@ -100,6 +103,9 @@ def create_jobsubSWASH(job_name,time,cpus,config):
         f.write(f"\n")
         
         # Create directory
+        f.write(f"if [ ! -d \"$SCRATCH/{config}\" ]; then\n")
+        f.write(f"  mkdir $SCRATCH/{config}\n")
+        f.write(f"fi\n")
         f.write(f"mkdir $workdir\n")
         f.write(f"\n")
         
@@ -111,8 +117,8 @@ def create_jobsubSWASH(job_name,time,cpus,config):
         
         # Run CROCO
         f.write(f"echo \"Launching SWASH...\"\n")
-        f.write(f"#srun /share/software/user/open/swash/9.01a/bin/swash.exe\n") # To confirm
-        f.write(f"mpirun -np 8 /share/software/user/open/swash/9.01a/bin/swash.exe\n")
+        f.write(f"srun /share/software/user/open/swash/9.01a/bin/swash.exe\n") # To confirm
+        f.write(f"#mpirun -np {cpus} /share/software/user/open/swash/9.01a/bin/swash.exe\n")
         f.write(f"echo \"... SWASH done\"\n")
         
         return None

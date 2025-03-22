@@ -37,6 +37,7 @@ def extract_tstepCROCO(directory):
 def extract_tstepSWASH(directory):
     directory = os.path.join('/scratch/users/treillou/',directory)
     param_file = None
+    target_value = None
 
     # Search for croco.in in the directory
     for root, _, files in os.walk(directory):

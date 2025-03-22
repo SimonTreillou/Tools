@@ -47,6 +47,7 @@ def extract_nb_dtSWASH(directory):
     directory = os.path.join('/scratch/users/treillou/',directory)
     param_file = None
     nbdt=None
+    time_sim = None
 
     # Search for croco.in in the directory
     for root, _, files in os.walk(directory):
@@ -66,7 +67,10 @@ def extract_nb_dtSWASH(directory):
                 if match:
                     time_sim=float(match.group(1))
         dt = extract_tstep(directory,"SWASH")
-        nbdt = int(time_sim/dt)
+        if (dt==None) or (time_sim==None):
+            nbdt=None
+        else:
+            nbdt = int(time_sim/dt)
     return nbdt
 
 def extract_nb_dt(directory,model="CROCO"):
