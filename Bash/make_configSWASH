@@ -1,0 +1,5 @@
+#!/bin/bash
+#
+
+module purge; ml py-scipystack/1.0_py36; ml py-netcdf4/1.3.1_py36 
+python3 $HOME/Tools/Slurm/make_configSWASH.py

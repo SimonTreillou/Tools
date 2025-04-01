@@ -28,15 +28,13 @@ def make_crocogrid(grdname, depth, dx, dy, Lx, Ly):
     xu, xv, xp = rho2uvp(xr)
     yu, yv, yp = rho2uvp(yr)
     # Create the grid file
-    print('Create the grid file')
+    #print('Create the grid file')
 
     M, L = yp.shape
-    print(f'LLm {L - 1}')
-    print(f'MMm {M - 1}')
+    print(f'Grid dimensions: {L - 1} x {M - 1}')
     create_grid(L, M, grid_file_path, CROCO_title)
 
     #  Compute the metrics
-    print('Compute the metrics')
     pm = 1. / dx
     pn = 1. / dy
     dndx = 0.
@@ -46,8 +44,6 @@ def make_crocogrid(grdname, depth, dx, dy, Lx, Ly):
     dymax = np.max(np.max(dy / 1000))
     dymin = np.min(np.min(dy / 1000))
 
-    print(f'Min dx={dxmin} km - Max dx={dxmax} km')
-    print(f'Min dy={dymin} km - Max dy={dymax} km')
     #  Angle between XI-axis and the direction
     #  to the EAST at RHO-points [radians].
     rotation_angle = 0
@@ -56,8 +52,6 @@ def make_crocogrid(grdname, depth, dx, dy, Lx, Ly):
 
     ############################################################################
     # Fill the grid file
-    print('Fill the grid file')
-
     nc = Dataset(grid_file_path, 'r+')
 
     nc['pm'][:] = pm
@@ -318,7 +312,7 @@ def read_grid2Dcsv(filename,wlevel=0.0):
     return x,h
 
 def planar3D(dx,Lx,dy,Ly,beta,offset):
-    x = np.flip(np.arange(0, Lx + dx, dx))
+    x = np.arange(0, Lx + dx, dx)
     y = np.arange(0, Ly + dy, dy)
     x, y = np.meshgrid(x, y)
     h = beta * (x - offset)
@@ -363,17 +357,19 @@ def make_grid(repo,model,args):
 
     if model=="SWASH":
         # Save bathy for SWASH
+        h=h.T
         with open(repo+'/bathy.bot', 'w') as file:
             # Loop through each row of the depth array
             for row in h:
                 # Write each value with a width of 1.4 characters
-                file.write(' '.join(f'{val:1.4f}' for val in row))
+                file.write(''.join(f"   {val:1.4f}" for val in row))
                 # Newline at the end of each row
                 file.write('\n')
     elif model=="CROCO":
         make_crocogrid("grid.nc", h, dx, dy, Lx, Ly)
     else:
         print("Unknown model")
+    return Lx,Ly,Mx,My,dx,dy
         
 
       

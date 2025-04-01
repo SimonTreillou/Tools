@@ -2,19 +2,19 @@ import os
 import re
 import sys
 
-def find_and_extract_MPI_CROCO(directory):
-    directory = os.path.join('/scratch/users/treillou/',directory)
-    dir_comp = os.path.join(directory,'Compile')
+def extract_mpiCROCO(directory):
+    #directory = os.path.join('/scratch/users/treillou/',directory)
+    #dir_comp = os.path.join(directory,'Compile')
     param_file = None
 
     # Search for param.h in the directory
-    for root, _, files in os.walk(dir_comp):
+    for root, _, files in os.walk(directory):
         if "param.h" in files:
-            param_file = os.path.join(root, "param_.f")
+            param_file = os.path.join(root, "param.h")
             break
 
     if not param_file:
-        print("Error: param_.f file not found in the specified directory.")
+        print("Error: param.h file not found in the specified directory.")
         return None
 
     # Regular expressions to match dimensions
@@ -41,8 +41,8 @@ def find_and_extract_MPI_CROCO(directory):
         print("Error")
         return None
         
-def find_and_extract_MPI_SWASH(directory):
-    directory = os.path.join('/scratch/users/treillou/',directory)
+def extract_mpiSWASH(directory):
+    #directory = os.path.join('/scratch/users/treillou/',directory)
     param_file = None
 
     # Search for jobsub in the directory
@@ -77,11 +77,11 @@ def find_and_extract_MPI_SWASH(directory):
         print("Error")
         return None
 
-def find_and_extract_MPI(directory,model="CROCO"):
+def extract_mpi(directory,model="CROCO"):
     if model=="CROCO":
-        return find_and_extract_MPI_CROCO(directory)
+        return extract_mpiCROCO(directory)
     elif model=="SWASH":
-        return find_and_extract_MPI_SWASH(directory)
+        return extract_mpiWASH(directory)
     else:
         print("Error: Invalid model")
         return None
@@ -92,11 +92,11 @@ if __name__ == "__main__":
         sys.exit(1)
     elif len(sys.argv) == 2:
         directory = sys.argv[1]
-        find_and_extract_MPI(directory)
+        extract_mpi(directory)
     elif len(sys.argv) ==3:
         directory = sys.argv[1]
         model = sys.argv[2]
-        find_and_extract_MPI(directory,model)
+        extract_mpi(directory,model)
     else:
         print("Usage: python extract_MPI.py <directory> OPT:<model>")
         sys.exit(1)

@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+
+if [ "$#" -eq 0 ]; then
+    python3 $HOME/Tools/Read_simulations/check_jobcpu.py
+elif [ "$#" -eq 1 ]; then
+    python3 $HOME/Tools/Read_simulations/check_jobcpu.py $1 
+else
+    echo "Argument invalide"
+fi

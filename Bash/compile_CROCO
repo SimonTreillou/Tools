@@ -1,0 +1,5 @@
+#!/bin/bash
+#
+
+#module purge; ml hdf5 netcdf netcdf-fortran gcc openmpi
+python3 $HOME/Tools/Slurm/compile_CROCO.py

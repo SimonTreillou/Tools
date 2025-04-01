@@ -45,10 +45,12 @@ def create_jobsubCROCO(job_name,time,cpus,config):
         f.write(f"  mkdir $SCRATCH/{config}\n")
         f.write(f"fi\n")
         f.write(f"mkdir $workdir\n")
+        f.write(f"echo "$SLURM_JOB_ID" > $workdir/jobid\n")
         f.write(f"\n")
         
         # Copy files
         f.write(f"cp croco*    $workdir\n")
+        f.write(f"cp *.nc      $workdir\n")
         f.write(f"cp *.h       $workdir\n")
         f.write(f"cp job*      $workdir\n")
         f.write(f"cp *.F       $workdir\n")
@@ -76,14 +78,13 @@ def create_jobsubSWASH(job_name,time,cpus,config):
         f.write(f"#SBATCH --time={time}\n")
         f.write(f"#SBATCH --ntasks={cpus}\n")
         f.write(f"#SBATCH --cpus-per-task=1\n")
-        f.write(f"#SBATCH --mem-per-cpu=2G\n")
+        f.write(f"#SBATCH --mem-per-cpu=6G\n")
         f.write(f"#SBATCH --mail-user=treillou@stanford.edu\n")
         f.write(f"#SBATCH --mail-type=ALL\n")
         f.write(f"\n")
         
         # Load necessary modules
         f.write(f"module purge\n")
-        f.write(f"module load physics/\n")
         f.write(f"module load openmpi\n")
         f.write(f"\n")
         
@@ -91,6 +92,7 @@ def create_jobsubSWASH(job_name,time,cpus,config):
         f.write(f"homedir=$SLURM_SUBMIT_DIR\n")
         f.write(f"workdir=$SCRATCH/{config}/{job_name}\n")
         f.write(f"INPUT_DATA=input.sws\n")
+        f.write(f"PATH=$PATH:/home/groups/bakercm/SWASH_GNU\n")
         f.write(f"\n")
         
         # Check if the name of the directory does not already exists
@@ -107,19 +109,29 @@ def create_jobsubSWASH(job_name,time,cpus,config):
         f.write(f"  mkdir $SCRATCH/{config}\n")
         f.write(f"fi\n")
         f.write(f"mkdir $workdir\n")
+        f.write(f"echo "$SLURM_JOB_ID" > $workdir/jobid\n")
         f.write(f"\n")
         
         # Copy files
         f.write(f"cp * $workdir\n")
         f.write(f"cd $workdir\n")
-        f.write(f"ln -s $INPUT_DATA INPUT\n")
+        f.write(f"cp $INPUT_DATA INPUT\n")
+        f.write(f"cp home/groups/bakercm/SWASH_GNU/swash.exe .\n")
+        f.write(f"cp home/groups/bakercm/SWASH_GNU/swashrun .\n")
+        f.write(f"chmod +rx swashrun\n")
+        f.write(f"chmod +rx swash.exe\n")
         f.write(f"\n")
+        
+        # Create machine file
+        f.write(f"srun hostname -s | sort -u > machinefile\n")
         
         # Run CROCO
         f.write(f"echo \"Launching SWASH...\"\n")
-        f.write(f"srun /share/software/user/open/swash/9.01a/bin/swash.exe\n") # To confirm
-        f.write(f"#mpirun -np {cpus} /share/software/user/open/swash/9.01a/bin/swash.exe\n")
+        f.write(f"#srun swash.exe\n") # To confirm
+        f.write(f"swashrun -input input.sws -mpi {cpus}\n")
         f.write(f"echo \"... SWASH done\"\n")
+        
+        f.write(f"cp input.prt-001 PRINT")
         
         return None
         
@@ -133,17 +145,19 @@ def create_jobsub(job_name,time,cpus,config='',model="CROCO"):
         return None
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("Usage: python3 create_and_submit_job.py <job_name> <time> <number of CPUS> OPT:<model>")
+    if len(sys.argv) < 5:
+        print("Usage: python3 create_and_submit_job.py <job_name> <time> <number of CPUS> <config> OPT:<model>")
         sys.exit(1)
-    elif len(sys.argv) == 4:
-        job_name = sys.argv[1]
-        time = sys.argv[2]
-        cpus = sys.argv[3]
-        create_jobsub(job_name,time,cpus,"CROCO")
     elif len(sys.argv) == 5:
         job_name = sys.argv[1]
         time = sys.argv[2]
         cpus = sys.argv[3]
-        model = sys.argv[4]
-        create_jobsub(job_name,time,cpus,model)
+        config = sys.argv[4]
+        create_jobsub(job_name,time,cpus,config,"CROCO")
+    elif len(sys.argv) == 6:
+        job_name = sys.argv[1]
+        time = sys.argv[2]
+        cpus = sys.argv[3]
+        config = sys.argv[4]
+        model = sys.argv[5]
+        create_jobsub(job_name,time,cpus,config,model)
