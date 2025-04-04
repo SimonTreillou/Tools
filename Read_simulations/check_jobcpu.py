@@ -8,6 +8,34 @@ import csv
 from extract_dim import extract_dim
 from extract_nb_dt import extract_nb_dt
 
+
+def get_job_cores(jobid):
+    try:
+        # Command to get the number of cores with sacct
+        command = ['sacct', '--format=JobID,ReqCPUS', '--noheader', '--jobs={}'.format(jobid)]
+        
+        # Running the command
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, command, output=stdout, stderr=stderr)
+        
+        # Extracting the number of cores from the result
+        output = stdout.decode().strip()
+        lines = output.split('\n')
+        
+        for line in lines:
+            parts = line.split()
+            if parts[0] == str(jobid):
+                return int(parts[1])
+                
+        raise ValueError(f"No such job with ID: {jobid}")
+
+    except subprocess.CalledProcessError as e:
+        print("An error occurred while running sacct command:", e.output.decode())
+        return None
+
 def convert_cpu_time_to_seconds(cpu_time):
     if '-' in cpu_time:
         days, time_part = cpu_time.split('-')

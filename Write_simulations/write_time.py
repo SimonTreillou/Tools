@@ -32,6 +32,17 @@ def write_timeSWASH(repo,simtime,dt):
         data[line]="COMPUTE 000000.000 "+str(dt)+" SEC {:02d}{:02d}{:02d}.000\n".format(hours,mins,secs)
     with open(repo+'/input.sws', 'w') as file:
         file.writelines(data)
+    lines=[]
+    with open(repo+'/input.sws', "r") as file:
+        for num, line in enumerate(file):
+            if "QUANTITY HS" in line:
+                lines.append(num)
+    with open(repo+'/input.sws', 'r', encoding='utf-8') as file:
+        data = file.readlines()
+    for line in lines:
+        data[line]="QUANTITY HS SETUP DUR "+str(int(simtime))+" SEC\n"
+    with open(repo+'/input.sws', 'w') as file:
+        file.writelines(data)
         
 def write_time(repo,simtime,dt,model="CROCO"):
     if model == "CROCO":

@@ -12,6 +12,7 @@ from extract_mpi import extract_mpi
 from write_bdrag import write_bdrag
 from write_MPI import write_MPI
 from write_time import write_time
+from write_output import write_output
 from write_wavespectum import write_wavespectrum
 from make_grid import make_grid
 from write_grid import write_grid
@@ -109,7 +110,15 @@ if __name__ == "__main__":
         SimTime=check_where("SimTime",fixed_params,variable_params,3600)
         dt=check_where("dt",fixed_params,variable_params,0.05)
             
-        write_time("./Prod/"+name,SimTime,dt)
+        write_time("./Prod/"+name,SimTime,dt,"CROCO")
+        
+        #
+        # Output time frequency
+        #
+        Freq=check_where("Freq",fixed_params,variable_params,2*Tp)
+        FreqCROCO=int(Freq/dt)
+        write_output("./Prod/"+name,FreqCROCO,"CROCO")
+        
         
         #
         # MPI

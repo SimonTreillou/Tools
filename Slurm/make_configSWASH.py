@@ -12,6 +12,7 @@ from extract_mpi import extract_mpi
 from write_bdrag import write_bdrag
 from write_MPI import write_MPI
 from write_time import write_time
+from write_output import write_output
 from write_wavespectum import write_wavespectrum
 from make_grid import make_grid
 from write_grid import write_grid
@@ -91,19 +92,16 @@ if __name__ == "__main__":
             args={"Option": GridOption,"wlevel": wlevel,"filename": filename,
                          "dx": dx, "Ly": Ly}
             Lx,Ly,Mx,My,dx,dy=make_grid(".","SWASH",args)
-            print("1")
             write_grid("./Prod/"+name,Lx,Ly,Mx-2,My-2,Mz,"grid.nc","SWASH")
             shutil.copyfile("./bathy.bot", "./Prod/"+name+"/bathy.bot")
         elif GridOption==None:
             print('No grid provided. Use default Routines grid.')
-        print("2")
-        
+
         #
         # Bottom friction
         #
         bdrag=check_where("bdrag",fixed_params,variable_params,1.e-5)
         write_bdrag("./Prod/"+name,bdrag,"SWASH")
-        print("3")
 
         #
         # TIME
@@ -112,7 +110,13 @@ if __name__ == "__main__":
         dt=check_where("dt",fixed_params,variable_params,0.05)
             
         write_time("./Prod/"+name,SimTime,dt,"SWASH")
-        print("4")
+
+        #
+        # Output time frequency
+        #
+        Freq=check_where("Freq",fixed_params,variable_params,2*Tp)
+
+        write_output("./Prod/"+name,int(Freq),"SWASH")
         
         #
         # MPI

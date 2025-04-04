@@ -45,7 +45,7 @@ def create_jobsubCROCO(job_name,time,cpus,config):
         f.write(f"  mkdir $SCRATCH/{config}\n")
         f.write(f"fi\n")
         f.write(f"mkdir $workdir\n")
-        f.write(f"echo "$SLURM_JOB_ID" > $workdir/jobid\n")
+        f.write(f"echo \"$SLURM_JOB_ID\" > $workdir/jobid\n")
         f.write(f"\n")
         
         # Copy files
@@ -109,15 +109,15 @@ def create_jobsubSWASH(job_name,time,cpus,config):
         f.write(f"  mkdir $SCRATCH/{config}\n")
         f.write(f"fi\n")
         f.write(f"mkdir $workdir\n")
-        f.write(f"echo "$SLURM_JOB_ID" > $workdir/jobid\n")
+        f.write(f"echo \"$SLURM_JOB_ID\" > $workdir/jobid\n")
         f.write(f"\n")
         
         # Copy files
         f.write(f"cp * $workdir\n")
         f.write(f"cd $workdir\n")
         f.write(f"cp $INPUT_DATA INPUT\n")
-        f.write(f"cp home/groups/bakercm/SWASH_GNU/swash.exe .\n")
-        f.write(f"cp home/groups/bakercm/SWASH_GNU/swashrun .\n")
+        f.write(f"cp /home/groups/bakercm/SWASH_GNU/swash.exe .\n")
+        f.write(f"cp /home/groups/bakercm/SWASH_GNU/swashrun .\n")
         f.write(f"chmod +rx swashrun\n")
         f.write(f"chmod +rx swash.exe\n")
         f.write(f"\n")
