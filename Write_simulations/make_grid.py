@@ -69,6 +69,8 @@ def make_crocogrid(grdname, depth, dx, dy, Lx, Ly):
     nc['angle'][:] = rotation_angle
     nc['f'][:] = f
     nc['h'][:] = depth
+    nc['xl'][:] = Lx
+    nc['el'][:] = Ly   # important for periodicity in wavemaker
     nc['spherical'][:] = 'F'  # this does not work
 
     # Compute the mask
