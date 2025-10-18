@@ -2,7 +2,7 @@
 import sys
 import os  
 sys.path.append('/home/users/treillou/Tools/')
-from read_parameter import read_parameter
+from Sherlock.read_parameter import read_parameter
 
 def compile_CROCO():
     os.system('module purge; module load gcc openmpi hdf5 netcdf-fortran; ./jobcomp > comp.out')

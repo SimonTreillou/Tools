@@ -17,7 +17,7 @@ from write_wavespectum import write_wavespectrum
 from make_grid import make_grid
 from write_grid import write_grid
 # TODO: import bathy
-from read_parameter import read_parameter
+from Sherlock.read_parameter import read_parameter
 from create_jobsub import create_jobsub
 #import submit_job
 from copy_all_files import copy_all_files
