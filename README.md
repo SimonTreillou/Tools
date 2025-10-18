@@ -18,6 +18,9 @@
 ## Directory: Misc
 ### Diverse stuff
 
+## Directory: Demos
+### Small demonstrator for ideas, such as numerical schemes, etc.
+
 ## Directory: Read_simulations
 ### Different scripts useful to read the input of a given simulation
    - check_jobcpu.py: will check the wall-time, number of CPUs, etc. of simulations present in your $SCRATCH directory
