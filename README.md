@@ -48,6 +48,11 @@ Sherlock-specific routines:
       - make_configCROCO.py: same but with CROCO
       - compile_CROCO.py: will compile all the CROCO configurations (i.e. directories) present under ./Prod/
       - launch.py: will 'sbatch jobsub' all the configurations present under ./Prod/
+    
+## To do
+   - [ ] add coarse graining module
+   - [ ] add fourier energy flux
+   - [ ] add structures
                                                                                         
 ## Resources and recommendations
 - Post-processing and analysis scripts of Emma Shie Nuss (https://github.com/emmashie/funpy#)
