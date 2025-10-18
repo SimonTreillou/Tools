@@ -3,3 +3,4 @@
 *.nc
 *.bot
 *checkpoint.py
+.vscode
