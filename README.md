@@ -1,5 +1,5 @@
 # Tools
-## Some Python and Matlab scripts I used that can be useful for Sherlock
+## My Python (and shamefully Matlab) toolbox
 
 ## Directory: Bash
 ### Different bash scripts to use as commands
@@ -10,13 +10,11 @@
    - make_configCROCO: with specified 'fixed_params.json' and 'variable_params.json' files, will create a directory ./Prod containing different CROCO simulations
    - make_configSWASH: same but with SWASH
 
-## Directory: Matlab
-### Different Matlab scripts
-   - swash_to_netcdf2D: convert .mat SWASH files into 2D netcdf file (for zeta, vorticity, etc.)
-   - swash_to_netcdf3D: same but 3D
+## Diagnostics
+   - skills module
 
 ## Directory: Misc
-### Diverse stuff
+### Diverse stuff and Matlab scripts
 
 ## Directory: Demos
 ### Small demonstrator for ideas, such as numerical schemes, etc.
@@ -48,4 +46,7 @@
    - make_configCROCO.py: same but with CROCO
    - compile_CROCO.py: will compile all the CROCO configurations (i.e. directories) present under ./Prod/
    - launch.py: will 'sbatch jobsub' all the configurations present under ./Prod/
-~                                                                                     
+                                                                                     
+
+## Resources and recommendations
+- Post-processing and analysis scripts of Emma Shie Nuss (https://github.com/emmashie/funpy#)
