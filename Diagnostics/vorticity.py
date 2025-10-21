@@ -26,7 +26,7 @@ def compute_vorticity(varx,vary,dx,dy):
     elif varx.ndim == 4 and vary.ndim == 4:
         vort = (vary[:, :, :, 1:] - vary[:, :, :, :-1]) / dx - (varx[:, :, 1:, :] - varx[:, :, :-1, :]) / dy
     elif varx.ndim == 2 and vary.ndim == 2:
-        vort = (vary[:, 1:] - vary[:, :-1]) / dx - (varx[:, 1:] - varx[:, :-1]) / dy
+        vort = (vary[:, 1:] - vary[:, :-1]) / dx - (varx[1:, :] - varx[-1:, :]) / dy
     else:
         raise ValueError("Input arrays have incorrect dimensions (different shapes or unsupported number of dimensions).")
     return vort
