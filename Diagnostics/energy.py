@@ -4,7 +4,7 @@ import numpy as np
 # energy_spectrum : Compute isotropic kinetic energy spectrum from 2D velocity field
 # ---------------------------------------------------------------
 
-def energy_spectrum(u, v, dx, dy, nbins=None):
+def energy_spectrum(u, v, dx, dy, nbins=None, components='both'):
     """
     Compute isotropic kinetic energy spectrum E(k) from 2D velocity field.
     
@@ -16,6 +16,9 @@ def energy_spectrum(u, v, dx, dy, nbins=None):
         Grid spacing [m]
     nbins : int (optional)
         Number of bins for isotropic averaging
+    components : str (optional)
+        Which velocity components to use: 'both' (default), 'u' (cross-shore only), 
+        or 'v' (longshore only)
 
     Returns
     -------
@@ -40,7 +43,14 @@ def energy_spectrum(u, v, dx, dy, nbins=None):
     K = np.sqrt(KX**2 + KY**2)
 
     # Spectral energy density (Parseval-normalized)
-    spec2d = 0.5 * (np.abs(u_hat)**2 + np.abs(v_hat)**2) / (nx * ny)**2
+    if components == 'both':
+        spec2d = 0.5 * (np.abs(u_hat)**2 + np.abs(v_hat)**2) / (nx * ny)**2
+    elif components == 'u':
+        spec2d = 0.5 * np.abs(u_hat)**2 / (nx * ny)**2
+    elif components == 'v':
+        spec2d = 0.5 * np.abs(v_hat)**2 / (nx * ny)**2
+    else:
+        raise ValueError("components must be 'both', 'u', or 'v'")
 
     # Isotropic averaging
     kmax = np.max(K)

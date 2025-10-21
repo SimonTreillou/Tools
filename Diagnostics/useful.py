@@ -7,6 +7,7 @@ from scipy.ndimage import gaussian_filter1d
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # average_over_timesteps: Compute the average of a time series over consecutive segments.
 # smooth: Smooth an array using a moving average filter with convolution.
+# wave_average: Compute the average of a 3D array over a specified time window.
 # ---------------------------------------------------------------
 
 def average_over_timesteps(p, Navg):
@@ -54,6 +55,34 @@ def smooth(x,L):
     return res
 
 def wave_average(var,dt=1,T=13):
+    """
+    Compute the average of a 3D array over a specified time window.
+
+    This function takes a 3D array and computes averages over specified time periods,
+    reducing the temporal dimension while maintaining spatial dimensions.
+
+    Parameters
+    ----------
+    var : numpy.ndarray
+        3D array with shape (time, M, L) where time is the temporal dimension
+        and M, L are spatial dimensions
+    dt : float, optional
+        Time step between consecutive time points (default is 1)
+    T : float, optional
+        Length of the averaging window in the same units as dt (default is 13)
+
+    Returns
+    -------
+    numpy.ndarray
+        3D array with reduced time dimension, shape (n, M, L) where
+        n = floor(original_time_length / (T/dt))
+
+    Notes
+    -----
+    - The function will truncate the input array if the total length is not
+      perfectly divisible by the averaging window size
+    - Each output time point represents an average over T/dt input time points
+    """
     N=int(T/dt)
     T,M,L=var.shape
     n = int(T / N)
