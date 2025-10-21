@@ -56,7 +56,7 @@ def energy_spectrum(u, v, dx, dy, nbins=None, components='both'):
     kmax = np.max(K)
     if nbins is None:
         nbins = nx // 2
-    kbins = np.linspace(0.0, kmax, nbins+1)
+    kbins = np.linspace(1e-10, kmax, nbins+1)
     E_k = np.zeros(nbins)
     k_mid = 0.5*(kbins[:-1] + kbins[1:])
 
@@ -67,8 +67,56 @@ def energy_spectrum(u, v, dx, dy, nbins=None, components='both'):
         else:
             E_k[i] = 0.0
 
-    # Convert to spectral density per unit k (divide by shell width)
-    dk = kbins[1] - kbins[0]
-    E_k = E_k / dk
+    # Convert to spectral density per unit k (divide by actual shell width)
+    E_k = E_k / np.diff(kbins)
 
     return k_mid, E_k
+
+def energy_spectrum_1d(u, dx, component='u'):
+    """
+    Compute 1D kinetic energy spectrum from a velocity field.
+
+    Parameters
+    ----------
+    u : 1D or 2D array
+        Velocity component(s) [m/s].
+        If 2D, average the spectrum along the second dimension.
+    dx : float
+        Grid spacing [m].
+    component : str
+        'u' (default) or 'v' for clarity if you use both components.
+
+    Returns
+    -------
+    k : 1D array
+        Wavenumber [rad/m].
+    E_k : 1D array
+        1D energy spectral density [m^3/s^2].
+    """
+    u = np.asarray(u)
+    
+    # If 2D: compute along x and average over y
+    if u.ndim == 2:
+        nx, ny = u.shape
+        u_hat = np.fft.fft(u, axis=0)
+        u_spec = np.mean(np.abs(u_hat)**2, axis=1)
+    else:
+        nx = u.size
+        u_hat = np.fft.fft(u)
+        u_spec = np.abs(u_hat)**2
+
+    # Wavenumbers
+    k = np.fft.fftfreq(nx, d=dx) * 2 * np.pi
+    k = np.fft.fftshift(k)
+    u_spec = np.fft.fftshift(u_spec)
+
+    # Parseval normalization
+    # (Total energy in physical = total energy in spectral space)
+    spec_density = 0.5 * u_spec / (nx**2)
+
+    # Only keep positive wavenumbers
+    mask = k > 0
+    k_pos = k[mask]
+    E_k = spec_density[mask]
+
+    return k_pos, E_k
