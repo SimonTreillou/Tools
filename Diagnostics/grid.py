@@ -3,9 +3,12 @@ import pandas as pd
 from netCDF4 import Dataset
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
+# csf: Compute stretching curves for vertical coordinates.
+# lonlat_to_xy: Convert lon,lat to cartesian grid x,y.
 # rho2uvp: Convert variable on rho grid to u, v, and psi grids.
 # u2rho: Convert variable on u grid to rho grid.
 # v2rho: Convert variable on v grid to rho grid.
+# xy_to_lonlat: Convert cartesian grid x,y to lon,lat.
 # zlevs: Calculate vertical grid levels for ROMS model.
 # ---------------------------------------------------------------
 
@@ -37,6 +40,27 @@ def csf(sc, theta_s, theta_b):
         h = csrf
     return h
 
+def lonlat_to_xy(lon,lat):
+    """
+        Convert lon,lat coordinates to cartesian x,y grid.
+        
+        Parameters
+        ----------
+        lon : float or ndarray
+            Longitude coordinate(s).
+        lat : float or ndarray
+            Latitude coordinate(s).
+         
+        Returns
+        -------
+        x : float or ndarray
+            X coordinate(s).
+        y : float or ndarray
+            Y coordinate(s).   
+    """
+    transformer = Transformer.from_crs("epsg:4326","epsg:32613", always_xy=True)
+    x,y = transformer.transform(lon,lat)
+    return x,y
 
 def rho2uvp(rfield):
     """
@@ -148,6 +172,26 @@ def v2rho(var_v):
         var_rho[M, :] = var_rho[M-1, :]
     return var_rho
 
+def xy_to_lonlat(x,y):
+    """
+        Convert x,y coordinates to longitude and latitude.
+        
+        Parameters
+        ----------
+        x : float or ndarray
+            X coordinate(s).
+        y : float or ndarray
+            Y coordinate(s).    
+        Returns
+        -------
+        lon : float or ndarray
+            Longitude coordinate(s).
+        lat : float or ndarray
+            Latitude coordinate(s).
+    """
+    transformer = Transformer.from_crs("epsg:32613", "epsg:4326", always_xy=True)
+    lon,lat = transformer.transform(x, y)
+    return lon,lat
 
 def zlevs(h, zeta, theta_s, theta_b, hc, N, ttype, vtransform):
         """
@@ -241,3 +285,4 @@ def zlevs(h, zeta, theta_s, theta_b, hc, N, ttype, vtransform):
                 z[k, :, :] = z0 + zeta * (1. + z0 * hinv)
 
         return z
+    

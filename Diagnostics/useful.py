@@ -52,3 +52,12 @@ def smooth(x,L):
     res[0]=res[1]
     res[-1]=res[-2]
     return res
+
+def wave_average(var,dt=1,T=13):
+    N=int(T/dt)
+    T,M,L=var.shape
+    n = int(T / N)
+    var = var[:n * N, :, :]
+    reshaped = var.reshape(-1, N, M, L)  # reshape en 10 lignes de 10 colonnes
+    var_avg = reshaped.sum(axis=1) / N
+    return var_avg
