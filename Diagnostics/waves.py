@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
-import spectrum 
+from . import spectrum 
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # asymmetry: Compute wave asymmetry using the third standardized moment of the time derivative.
@@ -448,3 +448,5 @@ def test_oblique_waves(h, Tp, theta):
     print("  " + str(np.round(Ly)) + "  " + str(np.round(Ly * 2)) + "  " + str(np.round(Ly * 3)))
     print("Compatible incidence angles:")
     print("  " + str(np.round(a1)) + "  " + str(np.round(a2)) + "  " + str(np.round(a3)))
+
+# %%

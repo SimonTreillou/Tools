@@ -56,3 +56,4 @@ Sherlock-specific routines:
                                                                                         
 ## Resources and recommendations
 - Post-processing and analysis scripts of Emma Shie Nuss (https://github.com/emmashie/funpy#)
+- To test a module, run ```python -m Diagnostics.waves```
