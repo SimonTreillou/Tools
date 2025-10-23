@@ -59,7 +59,9 @@ Sherlock-specific routines:
 - To test a module, run ```python -m Diagnostics.waves```
 - In VSCode, to use this toolbox in everyfile, add these lines into ```settings.json``` in VSCode folder:
 ```
-"terminal.integrated.env.osx": {
+    "python.envFile": "${workspaceFolder}/.env",
+    "terminal.integrated.env.osx": {
     "PYTHONPATH": "/Users/simon/Code/Projects/Tools"},
     "python.analysis.extraPaths": ["/Users/simon/Code/Projects/Tools"]
 ```
+and add a ```.env``` to your repository with ```PYTHONPATH=/Users/simon/Code/Projects/Tools```
