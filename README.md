@@ -57,3 +57,9 @@ Sherlock-specific routines:
 ## Resources and recommendations
 - Post-processing and analysis scripts of Emma Shie Nuss (https://github.com/emmashie/funpy#)
 - To test a module, run ```python -m Diagnostics.waves```
+- In VSCode, to use this toolbox in everyfile, add these lines into ```settings.json``` in VSCode folder:
+```
+"terminal.integrated.env.osx": {
+    "PYTHONPATH": "/Users/simon/Code/Projects/Tools"},
+    "python.analysis.extraPaths": ["/Users/simon/Code/Projects/Tools"]
+```
