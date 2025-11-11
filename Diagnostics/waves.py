@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import sys
+from netCDF4 import Dataset
 from . import spectrum 
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
@@ -9,6 +9,7 @@ from . import spectrum
 # backrefract_dirspread: Compute back-refracted directional spreading.
 # backrefract_Snn: Compute back-refracted spectral density Snn0.
 # compute_a1_a2_b1_b2: Compute directional Fourier components a1, a2, b1, b2.
+# compute_Hs: Compute significant wave height Hs from diagnostic eddy output files.
 # dispersion_relation: Compute wavenumber k for given angular frequency and water depth.
 # find_theta_tseries: Estimate mean wave direction and spread from time series.
 # group_velocity: Compute group velocity of water waves.
@@ -149,6 +150,52 @@ def backrefract_Snn(f, Snn1, h1, h0, theta1, theta0, fmin=0.06, fmax=0.18):
     cg0 = group_velocity(2 * np.pi * f[imi:ima], h0)
     Snn0 = (cg0 * np.cos(np.deg2rad(theta0[imi:ima]))) / (cg1 * np.cos(np.deg2rad(theta1[imi:ima]))) * Snn1[imi:ima]
     return f[imi:ima], Snn0
+
+def compute_Hs(fname, mode="diag_eddy", longshore_average=False):
+    """
+    Compute significant wave height Hs from diagnostic eddy output files.
+
+    Parameters:
+    - fname : str
+        Base filename (path prefix) for the NetCDF files (expects fname+'avg.nc' and fname+'diags_eddy_avg.nc')
+    - mode : str, optional
+        Processing mode, default "diag_eddy"
+    - longshore_average : bool, optional
+        If True, return the longshore-averaged Hs
+
+    Returns:
+    - Hs : ndarray
+        Significant wave height (m)
+    """
+
+    if mode == "diag_eddy":
+        # Access averaged quantities
+        nc = Dataset(fname + 'avg.nc')
+        h = nc.variables['h'][:, :]
+        zeta = nc.variables['zeta'][:, :, :]
+        Dcrit = nc.variables['Dcrit'][0]
+        nc.close()
+
+        # Time-average of surface elevation
+        z0 = np.mean(zeta, 0)
+        # Adjust where depth is below critical (add slope contribution)
+        z0[h < Dcrit] = z0[h < Dcrit] - h[h < Dcrit]
+        z0 = z0**2  # <eta>^2
+        print(z0)
+
+        # Access time-averaged squared elevation <eta^2>
+        nc = Dataset(fname + 'diags_eddy_avg.nc')
+        zz = np.mean(nc.variables['zz'][:, :, :], 0)
+        nc.close()
+
+        # Svendsen (2005) p.126: Hs = 4.0083 * sqrt(<eta^2> - <eta>^2)
+        Hs = 4.0083 * np.sqrt(zz - z0)
+        if longshore_average:
+            Hs = np.nanmean(Hs, 0)  # longshore-average
+        return Hs
+
+    # If other modes are required later, handle here
+    return None
 
 def compute_a1_a2_b1_b2(Ezz, Exx, Eyy, Cxy, Qxz, Qyz):
     """
