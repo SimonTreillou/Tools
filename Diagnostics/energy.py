@@ -26,6 +26,11 @@ def energy_spectrum(u, v, dx, dy, nbins=None, components='both'):
         Wavenumber bins [rad/m]
     E_k : 1D array
         Energy spectrum density [m^3/s^2]
+
+    Notes
+    -----
+    The lower bound of the wavenumber bins (`kbins`) is set to 1e-10 to avoid division by zero,
+    which affects the lowest wavenumber bin.
     """
 
     nx, ny = u.shape
@@ -35,22 +40,23 @@ def energy_spectrum(u, v, dx, dy, nbins=None, components='both'):
     v_hat = np.fft.fftshift(np.fft.fft2(v))
 
     # Wavenumber grids (radians per meter)
-    kx = np.fft.fftfreq(nx, d=dx) * 2*np.pi
-    ky = np.fft.fftfreq(ny, d=dy) * 2*np.pi
+    kx = np.fft.fftfreq(ny, d=dy) * 2*np.pi
+    ky = np.fft.fftfreq(nx, d=dx) * 2*np.pi
     kx = np.fft.fftshift(kx)
     ky = np.fft.fftshift(ky)
+    # Note: With indexing='xy', KX and KY have shape (ny, nx)
     KX, KY = np.meshgrid(kx, ky, indexing='xy')
     K = np.sqrt(KX**2 + KY**2)
-
     # Spectral energy density (Parseval-normalized)
+    norm_factor = (nx * ny)**2
     if components == 'both':
-        spec2d = 0.5 * (np.abs(u_hat)**2 + np.abs(v_hat)**2) / (nx * ny)**2
+        spec2d = 0.5 * (np.abs(u_hat)**2 + np.abs(v_hat)**2) / norm_factor
     elif components == 'u':
-        spec2d = 0.5 * np.abs(u_hat)**2 / (nx * ny)**2
+        spec2d = 0.5 * np.abs(u_hat)**2 / norm_factor
     elif components == 'v':
-        spec2d = 0.5 * np.abs(v_hat)**2 / (nx * ny)**2
-    else:
-        raise ValueError("components must be 'both', 'u', or 'v'")
+        spec2d = 0.5 * np.abs(v_hat)**2 / norm_factor
+    if nbins is None:
+        nbins = min(nx, ny) // 2
 
     # Isotropic averaging
     kmax = np.max(K)
