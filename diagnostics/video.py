@@ -2,12 +2,13 @@ import matplotlib.animation as animation
 from IPython.display import Video
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # write_map_to_video: Generates and saves an animated video from a sequence of 2D data arrays using matplotlib.
 # ---------------------------------------------------------------
 
-def write_map_to_video(var,time,path,title=r'$\omega$ ($s^{-1})$',fps=5,vmin=-0.1,vmax=0.1,cmap="RdBu_r",label="Vorticity"):
+def write_map_to_video(var,time,path,x=None,y=None,title=r'$\omega$ ($s^{-1})$',fps=5,vmin=-0.1,vmax=0.1,cmap="RdBu_r",label="Vorticity",norm=None):
     """
     Generates and saves an animated video from a sequence of 2D data arrays using matplotlib.
 
@@ -42,11 +43,17 @@ def write_map_to_video(var,time,path,title=r'$\omega$ ($s^{-1})$',fps=5,vmin=-0.
     metadata = dict(title="Video", artist='Simon Treillou', comment='Allez le TFC') 
     writer = FFMpegWriter(fps=fps, metadata=metadata, codec='mpeg4')
 
+    if norm is None:
+        norm = colors.Normalize(vmin=vmin, vmax=vmax)
+    if x is None:
+        x = np.arange(var.shape[2]) # !!! Not working with coordinates !!!
+    if y is None:
+        y = np.arange(var.shape[1])
+
     # --- Figure setup ---
     fig, ax = plt.subplots(figsize=(8,8), dpi=300)
-    pcm = ax.pcolormesh(var[0], cmap=cmap, shading="auto", vmin=vmin, vmax=vmax)
+    pcm = ax.pcolormesh(var[0], cmap=cmap, shading="auto", norm=norm)
     cbar = fig.colorbar(pcm, ax=ax, label=label)
-    cbar.set_clim(vmin, vmax)  # fix limits for the colorbar
     ax.set_xlabel(r'$x$ (m)')
     ax.set_ylabel(r'$y$ (m)')
     tit=ax.set_title(title + f' at t = {time[0]:.2f} s',loc='left')
