@@ -181,7 +181,6 @@ def compute_Hs(fname, mode="diag_eddy", longshore_average=False):
         # Adjust where depth is below critical (add slope contribution)
         z0[h < Dcrit] = z0[h < Dcrit] - h[h < Dcrit]
         z0 = z0**2  # <eta>^2
-        print(z0)
 
         # Access time-averaged squared elevation <eta^2>
         nc = Dataset(fname + 'diags_eddy_avg.nc')
