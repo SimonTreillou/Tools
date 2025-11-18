@@ -1,7 +1,10 @@
 import numpy as np
+from netCDF4 import Dataset
+from . import useful
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # compute_vorticity: Compute vorticity from velocity fields.
+# compute_horizontal_shear_term: Compute RANS horizontal shear-production term.
 # enstrophy_spectrum: Compute isotropic wavenumber spectrum of enstrophy.
 # ---------------------------------------------------------------
 
@@ -30,6 +33,76 @@ def compute_vorticity(varx,vary,dx,dy):
     else:
         raise ValueError("Input arrays have incorrect dimensions (different shapes or unsupported number of dimensions).")
     return vort
+
+def compute_horizontal_shear_term(config,
+                       vel='u',          # mean velocity component: 'u','v','w'
+                       flux='uv',        # Reynolds stress: 'uu','uv','uw','vv','vw','ww'
+                       deriv='x',        # derivative direction: 'x','y','z'
+                       dx=1.0, dy=1.0,
+                       lvl=-1):
+    """
+    Computes a single RANS shear-production term:
+        P_ij = - <u'_i u'_j> * dUi/dxj
+
+    Parameters
+    ----------
+    vel : str
+        Mean velocity to differentiate ('u','v','w').
+    flux : str
+        Reynolds flux ('uu','uv','uw','vv','vw','ww').
+    deriv : str
+        Derivative direction: 'x','y','z'.
+    dx,dy : float
+        Grid spacing.
+    lvl : int
+        Vertical level index.
+
+    Returns
+    -------
+    shear_prod : 2D numpy array
+        The shear-production term at the chosen level.
+    """
+
+    # ----------------------------------------------------------
+    # Load mean velocity field
+    # ----------------------------------------------------------
+    fname = useful.find_file(config, suffix="_avg.nc")
+    nc = Dataset(fname)
+    Umean = np.mean(nc.variables[vel][..., lvl, :, :],axis=(0,1))  # assume dimensions: (time,z,y,x)
+    nc.close()
+
+    # ----------------------------------------------------------
+    # Compute derivative of mean velocity
+    # ----------------------------------------------------------
+    if deriv == 'x':
+        dU = (Umean[:, 1:] - Umean[:, :-1]) / dx
+    elif deriv == 'y':
+        dU = (Umean[1:, :] - Umean[:-1, :]) / dy
+    elif deriv == 'z':
+        raise NotImplementedError("Vertical derivative needs 3D Umean input.")
+    else:
+        raise ValueError("deriv must be 'x', 'y', or 'z'")
+
+    # ----------------------------------------------------------
+    # Load Reynolds stress (flux)
+    # ----------------------------------------------------------
+    flux_file = useful.find_file(config, suffix="_diags_eddy_avg.nc")
+    nc = Dataset(flux_file)
+    F = np.mean(nc.variables[flux][..., lvl, :, :],axis=(0,1))  # assume dimensions: (time,z,y,x)
+    nc.close()
+
+    # Average flux to grid of derivative (staggering)
+    if deriv == 'x':
+        F = 0.5 * (F[:, 1:] + F[:, :-1])
+    elif deriv == 'y':
+        F = 0.5 * (F[1:, :] + F[:-1, :])
+
+    # ----------------------------------------------------------
+    # Shear production term
+    # ----------------------------------------------------------
+    shear_prod = -F * dU
+
+    return shear_prod
 
 def enstrophy_spectrum(omega, dx, dy):
     """
