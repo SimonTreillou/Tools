@@ -3,6 +3,8 @@ import pandas as pd
 from netCDF4 import Dataset
 import datetime
 from scipy.ndimage import gaussian_filter1d
+import os
+import glob
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # average_over_timesteps: Compute the average of a time series over consecutive segments.
@@ -32,6 +34,52 @@ def average_over_timesteps(p, Navg):
 
     # Reshape into blocks and take the mean along axis 1
     return p[:Nblocks * Navg].reshape(Nblocks, Navg).mean(axis=1)
+
+def find_file(repo_path, suffix="_his.nc"):
+    """
+    Search for and return the path to a file in the given directory whose name ends with
+    the specified suffix.
+
+    This is a non-recursive search: only files directly under repo_path are considered.
+    The function builds a glob pattern by concatenating "*" and the provided suffix
+    (os.path.join(repo_path, "*" + suffix)).
+
+    Parameters
+    ----------
+    repo_path : str or os.PathLike
+        Path to the directory in which to search.
+    suffix : str, optional
+        Filename suffix to match (default: "_his.nc"). The suffix is appended to "*"
+        to form the glob pattern, so provide the trailing part of the filename
+        (for example "_diags_eddy_avg.nc" or ".nc").
+
+    Returns
+    -------
+    str
+        Full path to the single matching file.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no file matching the pattern is found in repo_path.
+    RuntimeError
+        If more than one matching file is found; this function requires a single,
+        unambiguous match.
+
+    Example
+    -------
+    >>> find_file("/path/to/repo", suffix="_diags_eddy_avg.nc")
+    '/path/to/repo/run_diags_eddy_avg.nc'
+    """
+    pattern = os.path.join(repo_path, "*" + suffix)
+    matches = glob.glob(pattern)
+
+    if len(matches) == 0:
+        raise FileNotFoundError(f"No file ending with '{suffix}' found in: {repo_path}")
+    if len(matches) > 1:
+        raise RuntimeError(f"Multiple matching files found: {matches}. Please specify a unique repo.")
+
+    return matches[0]
 
 def smooth(x,L):
     """
