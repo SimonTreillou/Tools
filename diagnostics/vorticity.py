@@ -3,10 +3,96 @@ from netCDF4 import Dataset
 from . import useful
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
+# check_budget_closure: Check vorticity budget closure.
+# compute_rms_vorticity: Compute RMS of vorticity budget terms.
 # compute_vorticity: Compute vorticity from velocity fields.
 # compute_horizontal_shear_term: Compute RANS horizontal shear-production term.
 # enstrophy_spectrum: Compute isotropic wavenumber spectrum of enstrophy.
+# load_vorticity_budget: Load vorticity budget terms from file.
 # ---------------------------------------------------------------
+
+def check_budget_closure(terms, tol=1e-4):
+    """
+    Check vorticity budget closure.
+
+    The function computes the sum of all RHS terms (all keys in `terms`
+    except 'rate') and compares it to the provided LHS stored under 'rate'.
+    It prints a short message and returns True if the maximum absolute
+    difference is below `tol`, otherwise False.
+
+    Parameters
+    ----------
+    terms : dict
+        Dictionary of numpy arrays representing budget terms. Must contain key 'rate'.
+    tol : float, optional
+        Tolerance for closure check (default 1e-4).
+
+    Returns
+    -------
+    bool
+        True if budget closes within tolerance, False otherwise.
+    """
+    if 'rate' not in terms:
+        raise KeyError("terms dictionary must contain key 'rate'")
+
+    # Sum all RHS terms into an array with the same shape as 'rate'
+    rhs_sum = np.zeros_like(terms['rate'])
+    for name, arr in terms.items():
+        if name == 'rate':
+            continue
+        # ensure shapes match (will raise if incompatible)
+        rhs_sum += arr
+
+    # Difference between LHS (rate) and RHS sum
+    diff = terms['rate'] - rhs_sum
+
+    # Maximum absolute difference used for the closure check
+    max_diff = float(np.max(np.abs(diff)))
+
+    if max_diff < tol:
+        print(f"Budget closure check passed: max difference = {max_diff:.2e} < tol = {tol:.2e}")
+        return True
+    else:
+        print(f"Budget closure check failed: max difference = {max_diff:.2e} >= tol = {tol:.2e}")
+        return False
+
+
+def compute_rms_vorticity(terms, axis=(1, 2, 3)):
+    """
+    Compute RMS (root-mean-square) of vorticity budget terms.
+
+    Computes RMS for each RHS term (all keys except 'rate') and for the 'rate'
+    term over the specified axes.
+
+    Parameters
+    ----------
+    terms : dict
+        Dictionary of numpy arrays representing budget terms. Must contain key 'rate'.
+    axis : tuple of ints, optional
+        Axes over which to compute the mean-square (default (1,2,3)).
+
+    Returns
+    -------
+    rms_rhs : dict
+        Dictionary mapping RHS term names to their RMS arrays.
+    rms_rate : ndarray
+        RMS array for the 'rate' term.
+    """
+    if 'rate' not in terms:
+        raise KeyError("terms dictionary must contain key 'rate'")
+
+    # Exclude 'rate' from RHS terms
+    RHS_terms = {k: v for k, v in terms.items() if k != 'rate'}
+
+    # Compute RMS = sqrt(mean(square)) for each RHS term
+    rms_rhs = {}
+    for name, arr in RHS_terms.items():
+        rms_rhs[name] = np.sqrt(np.mean(arr**2, axis=axis))
+
+    # RMS for the rate (LHS)
+    rms_rate = np.sqrt(np.mean(terms['rate']**2, axis=axis))
+
+    return rms_rhs, rms_rate
 
 def compute_vorticity(varx,vary,dx,dy):
     """
@@ -152,3 +238,51 @@ def enstrophy_spectrum(omega, dx, dy):
     k_bins = 0.5 * (k_bins[:-1] + k_bins[1:])
 
     return k_bins, E_k
+
+def load_vorticity_budget(repo_path, region=None):
+    """
+    Load vorticity budget terms from file.
+
+    Parameters
+    ----------
+    repo_path : str
+        Path or identifier passed to useful.find_file.
+    region : None or tuple (iy1, iy2, ix1, ix2), optional
+        If None (default) load full domain.
+        If tuple provided, extract the horizontal subset [:, :, iy1:iy2, ix1:ix2]
+        for all variables (assumes variables have dims (time, z, y, x)).
+
+    Returns
+    -------
+    terms : dict
+        Dictionary of numpy arrays containing budget terms (possibly subset).
+    """
+    # Build index: either full domain or [:, :, iy1:iy2, ix1:ix2]
+    if region is None:
+        idx = (slice(None), slice(None), slice(None), slice(None))
+    else:
+        iy1, iy2, ix1, ix2 = region
+        idx = (slice(None), slice(None), slice(iy1, iy2), slice(ix1, ix2))
+
+    # closing: rate = xadv+xstr+yadv+ystr+vadv+tilting+Vmix+Hmix+prsgrd+fast+nudg
+    fname = useful.find_file(repo_path, suffix="_diags_vrt3d_avg.nc")
+    ds = Dataset(fname)
+    # extract the same indexed subset for each variable
+    terms = {
+        'xstr' : ds.variables['vrt_xstretch'][idx],
+        'xadv' : ds.variables['vrt_xadv'][idx] - ds.variables['vrt_xstretch'][idx],
+        'ystr' : ds.variables['vrt_ystretch'][idx],
+        'yadv' : ds.variables['vrt_yadv'][idx] - ds.variables['vrt_ystretch'][idx],
+        'vtil' : ds.variables['vrt_tilting'][idx],
+        'zadv' : ds.variables['vrt_vadv'][idx] - ds.variables['vrt_tilting'][idx],
+        'vmix' : ds.variables['vrt_vmix'][idx],
+        'fast' : ds.variables['vrt_fast'][idx],
+        'hdif' : ds.variables['vrt_hdiff'][idx],
+        'hmix' : ds.variables['vrt_hmix'][idx],
+        'prsg' : ds.variables['vrt_prsgrd'][idx],
+        'nudg' : ds.variables['vrt_nudg'][idx],
+        'rate' : ds.variables['vrt_rate'][idx],
+    }
+    ds.close()
+    return terms
+
