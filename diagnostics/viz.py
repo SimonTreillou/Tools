@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # plot_3D: Create a 3D surface plot of a 3D variable over a bathymetric domain.
+# plot_bar_simple: Simple, robust bar plot with sensible defaults and comments.
+# plot_stack_fraction: Stacked bar plot of fractional contributions.
 # ---------------------------------------------------------------
 
 
@@ -180,3 +182,213 @@ def plot_3D(xr,yr,zr,h,zeta,data,
 
     plt.show()
 
+def plot_bar_simple(names, values, title="", ylabel="", vmin=None, vmax=None,
+                    color="#1f77b4", neg_color="#d62728", annotate=False,
+                    width=0.6, figsize=(10, 5), dpi=300, rotate=45):
+    """
+    Simple, robust bar plot with sensible defaults and comments.
+
+    Parameters
+    - names: sequence of labels (will be converted to strings)
+    - values: sequence/array of numeric values (can contain NaN)
+    - title: plot title (string)
+    - ylabel: y-axis label (string)
+    - vmin, vmax: explicit y-limits. If None they are chosen intelligently:
+        * if all values >= 0: vmin = 0, vmax = max(values)*1.1
+        * if all values <= 0: vmax = 0, vmin = min(values)*1.1
+        * otherwise symmetric around zero with 10% margin
+    - color: color for non-negative bars (string or list)
+    - neg_color: color for negative bars when mixed-sign data is present
+    - annotate: if True, numeric values are drawn above/below each bar
+    - width: bar width (0..1)
+    - figsize, dpi: figure size and resolution
+    - rotate: x-tick label rotation in degrees
+
+    Returns
+    - fig, ax: matplotlib figure and axes for further customization
+    """
+    # Convert inputs to numpy arrays for safe numeric ops
+    values = np.asarray(values, dtype=float)
+    names = [str(n) for n in names]
+
+    if values.shape[0] != len(names):
+        raise ValueError("Length of 'names' and 'values' must match.")
+
+    # Compute sensible vmin/vmax defaults if not provided
+    finite_vals = values[np.isfinite(values)]
+    if finite_vals.size == 0:
+        # fallback if all are NaN or infinite
+        vmin_default, vmax_default = -1.0, 1.0
+    else:
+        vmin_data, vmax_data = float(np.nanmin(finite_vals)), float(np.nanmax(finite_vals))
+        if vmin is None and vmax is None:
+            if vmin_data >= 0:
+                vmin_default = 0.0
+                vmax_default = vmax_data * 1.1 if vmax_data != 0 else 1.0
+            elif vmax_data <= 0:
+                vmax_default = 0.0
+                vmin_default = vmin_data * 1.1 if vmin_data != 0 else -1.0
+            else:
+                m = max(abs(vmin_data), abs(vmax_data)) * 1.1
+                vmin_default, vmax_default = -m, m
+        elif vmin is None:
+            vmin_default = vmin_data if np.isfinite(vmin_data) else (vmax * -1.0)
+            vmin_default = min(vmin_default, vmax)  # be conservative
+            vmax_default = vmax
+        elif vmax is None:
+            vmax_default = vmax_data if np.isfinite(vmax_data) else (vmin * -1.0)
+            vmax_default = max(vmax_default, vmin)  # be conservative
+            vmin_default = vmin
+        else:
+            vmin_default, vmax_default = vmin, vmax
+
+    # Create the figure and axis
+    fig, ax = plt.subplots(dpi=dpi, figsize=figsize)
+
+    # Choose bar colors:
+    # - If user passed a single color string and data contains mixed signs, use pos/neg colors.
+    # - If user passed a sequence of colors of matching length, use it directly.
+    if hasattr(color, "__iter__") and not isinstance(color, str):
+        if len(color) != len(values):
+            raise ValueError("If 'color' is a sequence, it must match length of 'values'.")
+        colors = list(color)
+    else:
+        if np.any(values < 0) and np.any(values > 0):
+            # mixed signs -> use two-tone coloring
+            colors = [color if v >= 0 or np.isnan(v) else neg_color for v in values]
+        else:
+            colors = color  # single color for all bars
+
+    # Plot bars (Matplotlib will skip NaN values)
+    bars = ax.bar(names, values, color=colors, edgecolor='black',
+                  linewidth=0.5, width=width)
+
+    # Draw horizontal zero line for reference
+    ax.axhline(0, color='0.2', linewidth=0.8, linestyle='--', zorder=0)
+
+    # Set axis labels, limits and appearance
+    ax.set_ylabel(ylabel)
+    ax.set_ylim([vmin_default, vmax_default])
+    ax.set_title(title, loc='right')
+    plt.xticks(rotation=rotate, ha='right')
+
+    # Remove top/right spines for a cleaner look
+    if hasattr(ax, "spines"):
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+
+    ax.grid(axis='y', alpha=0.3)
+
+    # Optional: annotate each bar with its numeric value
+    if annotate:
+        for bar, val in zip(bars, values):
+            if np.isnan(val):
+                txt = "NaN"
+            else:
+                txt = f"{val:.3g}"
+            height = bar.get_height()
+            # Place annotation above positive bars, below negative bars
+            if np.isnan(height):
+                y = 0
+                va = 'bottom'
+            elif height >= 0:
+                y = height + (vmax_default - vmin_default) * 0.01
+                va = 'bottom'
+            else:
+                y = height - (vmax_default - vmin_default) * 0.01
+                va = 'top'
+            ax.text(bar.get_x() + bar.get_width() / 2, y, txt,
+                    ha='center', va=va, fontsize=8)
+
+    plt.tight_layout()
+    plt.show()
+
+    return fig, ax
+
+def plot_stack_fraction(data, names, t=None, figsize=(12,6), cmap='tab10',
+                        normalize=True, smooth=None, alpha=0.95,
+                        legend_cols=2, ylabel="Fraction of total |budget|"):
+    """
+    Stacked-area plot of fractional contributions.
+
+    Parameters
+    - data: 2D array (nterms, nt) of contributions (can be signed)
+    - names: sequence of nterms labels
+    - t: 1D time axis (length nt). If None uses np.arange(nt)
+    - figsize: figure size tuple passed to plt.subplots
+    - cmap: matplotlib colormap name for colors
+    - normalize: if True convert to absolute contributions and normalize at each time to sum=1
+    - smooth: int window for simple moving-average smoothing (applied to fractions)
+    - alpha: transparency for stacked areas
+    - legend_cols: number of columns for the legend
+    - ylabel: y-axis label
+
+    Returns
+    - fig, ax: matplotlib figure and axes for further customization
+    """
+    import matplotlib.pyplot as plt
+
+    data = np.asarray(data, dtype=float)
+    if data.ndim != 2:
+        raise ValueError("data must be 2D with shape (nterms, nt)")
+
+    nterms, nt = data.shape
+    if t is None:
+        t = np.arange(nt)
+    else:
+        t = np.asarray(t)
+        if t.shape[0] != nt:
+            raise ValueError("time axis length must match data second dimension")
+
+    # Work with absolute contributions for fraction-of-budget plots
+    frac = np.abs(data)
+    # Replace NaNs with 0 for plotting / normalization
+    frac = np.where(np.isfinite(frac), frac, 0.0)
+
+    # Normalize to sum=1 at each time
+    if normalize:
+        tot = np.sum(frac, axis=0)
+        # avoid division by zero
+        zero_mask = tot == 0
+        tot[zero_mask] = 1.0
+        frac = frac / tot
+
+    # Optional smoothing (moving average) along time axis
+    if smooth is not None and smooth is not False:
+        w = int(smooth)
+        if w > 1:
+            kernel = np.ones(w) / w
+            frac_smooth = np.empty_like(frac)
+            for i in range(nterms):
+                frac_smooth[i, :] = np.convolve(frac[i, :], kernel, mode='same')
+            frac = frac_smooth
+
+    # Order terms so largest mean contribution is at bottom of stack for readability
+    mean_frac = np.mean(frac, axis=1)
+    order = np.argsort(mean_frac)[::-1]  # descending
+    frac_ord = frac[order, :]
+    names_ord = [names[i] for i in order]
+    mean_frac_ord = mean_frac[order]
+
+    # Colors
+    cmap_obj = plt.get_cmap(cmap)
+    # get distinct colors (wrap if nterms > cmap.N)
+    colors = [cmap_obj(i % getattr(cmap_obj, "N", 10)) for i in range(nterms)]
+
+    # Plot
+    fig, ax = plt.subplots(figsize=figsize, dpi=150)
+    ax.stackplot(t, frac_ord, labels=[f"{n} ({100*mf:.1f}%)" for n, mf in zip(names_ord, mean_frac_ord)],
+                 colors=colors[:nterms], alpha=alpha)
+    ax.set_ylim(0, 1 if normalize else None)
+    ax.set_xlim(t.min(), t.max())
+    ax.set_xlabel("Time index")
+    ax.set_ylabel(ylabel)
+    ax.set_title("Normalized fractional contributions to the vorticity budget", loc='left')
+    ax.grid(alpha=0.25)
+
+    # Legend: put to the right if many terms, show mean % in label
+    ax.legend(ncol=legend_cols, fontsize=9, bbox_to_anchor=(1.02, 1), loc='upper left', frameon=False)
+
+    plt.tight_layout(rect=(0, 0, 0.85, 1.0))  # leave room for legend
+
+    return fig, ax
