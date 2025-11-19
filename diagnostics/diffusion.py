@@ -223,5 +223,5 @@ def y_to_tp(x, y, V, Lx):
     meanV = np.mean(V[start:end])
     if meanV == 0:
         raise ZeroDivisionError("Mean velocity over the selected interval is zero")
-
+    print("Mean longshore current: ", meanV," m/s")
     return np.asarray(y) / meanV
