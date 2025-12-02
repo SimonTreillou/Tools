@@ -4,6 +4,7 @@ from . import useful
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # check_budget_closure: Check vorticity budget closure.
+# compute_dUdz: Compute vertical derivative dU/dz for 3D/4D fields.
 # compute_rms_vorticity: Compute RMS of vorticity budget terms.
 # compute_vorticity: Compute vorticity from velocity fields.
 # compute_horizontal_shear_term: Compute RANS horizontal shear-production term.
@@ -56,6 +57,58 @@ def check_budget_closure(terms, tol=1e-4):
         print(f"Budget closure check failed: max difference = {max_diff:.2e} >= tol = {tol:.2e}")
         return False
 
+def compute_dUdz(u, zr):
+    """
+    Compute vertical derivative dU/dz for a 3D field u(z,y,x) or 4D field u(t,z,y,x)
+    using the provided zr vertical coordinates (same shape as u: (z,y,x) or (t,z,y,x)).
+
+    Returns an array with the same shape as the input u.
+
+    Notes:
+    - zr may vary with (y,x) so gradient is computed along the vertical column
+      using the actual zr coordinates for uneven spacing.
+    - Time dimension is broadcast if one of u or zr has a singleton time dimension.
+    """
+    u = np.asarray(u)
+    zr = np.asarray(zr)
+
+    # validate dimensionality
+    if u.ndim not in (3, 4):
+        raise ValueError(f"u must have 3 or 4 dims (z,y,x) or (t,z,y,x); got shape {u.shape}")
+    if zr.ndim not in (3, 4):
+        raise ValueError(f"zr must have 3 or 4 dims (z,y,x) or (t,z,y,x); got shape {zr.shape}")
+
+    # promote to 4D (t,z,y,x) for unified processing
+    u4 = u[None, ...] if u.ndim == 3 else u.copy()
+    zr4 = zr[None, ...] if zr.ndim == 3 else zr.copy()
+
+    # ensure spatial dimensions (z,y,x) match between u and zr
+    if u4.shape[1:] != zr4.shape[1:]:
+        raise ValueError(f"spatial dimensions (z,y,x) must match: u has {u4.shape[1:]}, zr has {zr4.shape[1:]}")
+
+    # broadcast time dimension if needed (allow one of them to be length 1)
+    if u4.shape[0] != zr4.shape[0]:
+        if u4.shape[0] == 1:
+            u4 = np.repeat(u4, zr4.shape[0], axis=0)
+        elif zr4.shape[0] == 1:
+            zr4 = np.repeat(zr4, u4.shape[0], axis=0)
+        else:
+            raise ValueError(f"time dimension mismatch: u has {u4.shape[0]}, zr has {zr4.shape[0]}")
+
+    t, nz, ny, nx = u4.shape
+    # allocate output with same dtype and shape
+    dudz4 = np.empty_like(u4)
+
+    # compute vertical gradient column-by-column because zr varies with (y,x)
+    for tt in range(t):
+        for iy in range(ny):
+            for ix in range(nx):
+                # np.gradient accepts the coordinate array for uneven spacing along the axis
+                # here we pass the zr values for the column (length nz)
+                dudz4[tt, :, iy, ix] = np.gradient(u4[tt, :, iy, ix], zr4[tt, :, iy, ix])
+
+    # return in the same dimensionality as the input u (3D if input was 3D, else 4D)
+    return dudz4[0] if u.ndim == 3 else dudz4
 
 def compute_rms_vorticity(terms, axis=(1, 2, 3)):
     """
