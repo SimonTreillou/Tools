@@ -5,9 +5,11 @@ import datetime
 from scipy.ndimage import gaussian_filter1d
 import os
 import glob
+from numpy.lib.stride_tricks import sliding_window_view
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # average_over_timesteps: Compute the average of a time series over consecutive segments.
+# compute_coarse_grained_field: Coarse-grain a 2D field using circular top-hat convolution.
 # smooth: Smooth an array using a moving average filter with convolution.
 # wave_average: Compute the average of a 3D array over a specified time window.
 # ---------------------------------------------------------------
@@ -34,6 +36,85 @@ def average_over_timesteps(p, Navg):
 
     # Reshape into blocks and take the mean along axis 1
     return p[:Nblocks * Navg].reshape(Nblocks, Navg).mean(axis=1)
+
+def compute_coarse_grained_field(field, dx, scales):
+    """
+    Coarse-grain a 2D field using a circular top-hat convolution
+    with area weighting.
+
+    dx can be either:
+        - a scalar (constant grid spacing), OR
+        - a 2D array (variable grid spacing).
+
+    Parameters
+    ----------
+    field : 2D array (ny, nx)
+        Field to coarse-grain.
+    dx : float or 2D array (ny, nx)
+        Grid spacing magnitude (constant or spatially varying).
+    scales : list, array or scalar
+        Coarse-graining scales (same units as dx). If scalar, treated as a single scale.
+
+    Returns
+    -------
+    out : 3D array (nscale, ny, nx)
+        Coarse-grained field for each scale.
+        
+    Notes
+    -----
+    - Code inspired by René Schubert.
+    """
+
+    field = np.asarray(field)
+
+    # Handle dx: scalar → make a constant array
+    if np.isscalar(dx):
+        gs = np.full_like(field, float(dx))
+    else:
+        gs = np.asarray(dx)
+
+    # Ensure scales is iterable (allow scalar input)
+    scales = np.atleast_1d(scales).astype(float)
+
+    ny, nx = field.shape
+    nscale = len(scales)
+
+    out = np.full((nscale, ny, nx), np.nan)
+    gs_min = gs.min()
+
+    for k, L in enumerate(scales):
+
+        # window radius in pixels (conservative for variable grid)
+        radius = int(np.round(L / gs_min / 2.0))
+        w = 2 * radius + 1
+
+        # pixel offsets inside window → circular mask
+        yy, xx = np.indices((w, w))
+        dy = yy - radius
+        dxpix = xx - radius
+        dist = np.sqrt(dy**2 + dxpix**2)
+        circ = (dist < (L / 2))
+
+        # sliding windows of field and gs
+        fW  = sliding_window_view(field, (w, w))
+        gsW = sliding_window_view(gs,    (w, w))
+
+        # area weighting (gs^2)
+        areaW = gsW**2
+        area_sum = np.sum(areaW * circ, axis=(-2, -1))
+
+        # weighted field sum
+        f_weighted_sum = np.sum(fW * areaW * circ, axis=(-2, -1))
+
+        # coarse-grained interior
+        cg_interior = f_weighted_sum / area_sum
+
+        # fill interior region only; boundaries remain NaN
+        out[k,
+            radius:ny-radius,
+            radius:nx-radius] = cg_interior
+
+    return out
 
 def find_file(repo_path, suffix="_his.nc"):
     """
