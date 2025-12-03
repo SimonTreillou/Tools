@@ -8,7 +8,9 @@ import matplotlib.colors as colors
 # write_map_to_video: Generates and saves an animated video from a sequence of 2D data arrays using matplotlib.
 # ---------------------------------------------------------------
 
-def write_map_to_video(var,time,path,x=None,y=None,title=r'$\omega$ ($s^{-1})$',fps=5,vmin=-0.1,vmax=0.1,cmap="RdBu_r",label="Vorticity",norm=None):
+def write_map_to_video(var,time,path,x=None,y=None,title=r'$\omega$ ($s^{-1})$',fps=5,
+                       vmin=-0.1,vmax=0.1,cmap="RdBu_r",label="Vorticity",norm=None,
+                       xlab=r'$x$ (m)', ylab=r'$y$ (m)',vline=None):
     """
     Generates and saves an animated video from a sequence of 2D data arrays using matplotlib.
 
@@ -19,7 +21,7 @@ def write_map_to_video(var,time,path,x=None,y=None,title=r'$\omega$ ($s^{-1})$',
     time : array-like
         1D array of time values corresponding to each frame in `var`.
     path : str
-        Output filename (without extension) for the saved video. The video will be saved in the './Videos/' directory.
+        Output filename (without extension) for the saved video. The video will be saved in the directory indicated by `path`.
     title : str, optional
         Title for the plot, can include LaTeX formatting. Default is r'$\omega$ ($s^{-1})$'.
     fps : int, optional
@@ -54,8 +56,10 @@ def write_map_to_video(var,time,path,x=None,y=None,title=r'$\omega$ ($s^{-1})$',
     fig, ax = plt.subplots(figsize=(8,8), dpi=300)
     pcm = ax.pcolormesh(var[0], cmap=cmap, shading="auto", norm=norm)
     cbar = fig.colorbar(pcm, ax=ax, label=label)
-    ax.set_xlabel(r'$x$ (m)')
-    ax.set_ylabel(r'$y$ (m)')
+    if vline is not None:
+        ax.vlines(vline, ymin=y[0], ymax=y[-1], colors='k', linestyles='--')
+    ax.set_xlabel(xlab)
+    ax.set_ylabel(ylab)
     tit=ax.set_title(title + f' at t = {time[0]:.2f} s',loc='left')
 
     def update(frame):
@@ -66,4 +70,4 @@ def write_map_to_video(var,time,path,x=None,y=None,title=r'$\omega$ ($s^{-1})$',
     ani = animation.FuncAnimation(fig, update, frames=var.shape[0], interval=100, blit=True)
 
     # Save animation to file
-    ani.save('./Videos/'+path+'.mp4', writer=writer)
+    ani.save(path+'.mp4', writer=writer)
