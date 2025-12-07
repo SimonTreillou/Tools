@@ -69,7 +69,8 @@ def compute_flux_term(var1, var2,axis=(0)):
     flux = np.mean(var1_fluct * var2_fluct,axis=axis)
 
     return flux
-    def compute_coarse_grained_field(field, dx, scales, padding=False):
+
+def compute_coarse_grained_field(field, dx, scales, padding=False):
         """
         Coarse-grain a field over x,y only using a circular top-hat convolution
         without using sliding_window_view. Implements weighted convolution via
