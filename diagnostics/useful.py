@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from netCDF4 import Dataset
 import datetime
 from scipy.ndimage import gaussian_filter1d

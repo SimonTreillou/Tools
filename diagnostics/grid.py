@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from netCDF4 import Dataset
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
