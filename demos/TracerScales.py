@@ -11,13 +11,13 @@ from diagnostics.grid import zlevs, u2rho, v2rho
 from diagnostics.energy import energy_spectrum
 from diagnostics.vorticity import compute_vorticity, enstrophy_spectrum
 from diagnostics.viz import plot_3D
-from diagnostics.useful import compute_coarse_grained_field
+from diagnostics.useful import compute_coarse_grained_field,smooth
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from numpy.lib.stride_tricks import sliding_window_view
 fname='/Users/simon/Code/CONFIGS/Sandbox/FLASH_RIP_1layer/'
 fname='/Users/simon/Code/CONFIGS/IB09_SZ/IB09_3D_TRC_Dcrit_WMPER_test/'
-#fname='/Users/simon/Code/CONFIGS/IB09_SZ/IB09_3D_MR_Dcrit/'
+fname='/Users/simon/Code/CONFIGS/IB09_SZ/IB09_3D_MR_Dcrit/'
 
 # %% Load variables
 ds = nc.Dataset(fname+'rip_avg.nc')
@@ -37,12 +37,13 @@ hc = ds.getncattr('hc')
 N=10
 zr=zlevs(h, zeta, theta_s, theta_b, hc, N, 'o', 2)
 
+zeta = ds.variables['zeta'][:,:,:]
 u = u2rho(ds.variables['u'][:,-1,:,:])
 v = v2rho(ds.variables['v'][:,-1,:,:])
 tpas = ds.variables['tpas01'][:,-1,:,:]
 
 #%% Compute coarse-grained fields
-scale=10.0  # Coarse-graining scale in meters
+scale=30.0  # Coarse-graining scale in meters
 scales = np.atleast_1d(scale)
 
 def _compute_for_scale(sc):
@@ -500,4 +501,386 @@ plt.loglog(k,k**-1*(np.log(k)**(-1/3))*1e-6,'c--')
 
 plt.ylim([1e-11,1e-1])
 plt.show()
+# %%
+
+
+
+
+
+
+
+#%%
+import numpy as np
+
+def compute_cospectrum_1d(u, v, dx, detrend=True):
+    """
+    Compute 1D cospectrum Co_uv(k) from two signals u(x), v(x).
+
+    Parameters
+    ----------
+    u, v : 1D arrays
+        Real-space signals
+    dx : float
+        Grid spacing
+    detrend : bool
+        Remove mean before FFT
+
+    Returns
+    -------
+    k : 1D array
+        Wavenumbers
+    Co_uv : 1D array
+        Cospectrum
+    """
+
+    if detrend:
+        u = u - np.mean(u)
+        v = v - np.mean(v)
+
+    N = len(u)
+
+    # FFT
+    uhat = np.fft.rfft(u)
+    vhat = np.fft.rfft(v)
+
+    # Wavenumbers
+    k = np.fft.rfftfreq(N, d=dx) * 2*np.pi   # rad/m
+
+    # Cospectrum
+    Co_uv = np.real(uhat * np.conj(vhat)) / N
+
+    return k, Co_uv
+
+
+def compute_cospectrum_2d(u, v, dx, dy, detrend=True):
+    """
+    Compute 2D cospectrum Co_uv(kx, ky)
+
+    Parameters
+    ----------
+    u, v : 2D arrays (ny, nx)
+    dx, dy : grid spacing
+    """
+
+    if detrend:
+        u = u - np.mean(u)
+        v = v - np.mean(v)
+
+    ny, nx = u.shape
+
+    uhat = np.fft.fft2(u)
+    vhat = np.fft.fft2(v)
+
+    Co_uv_2d = np.real(uhat * np.conj(vhat)) / (nx * ny)
+
+    kx = np.fft.fftfreq(nx, d=dx) * 2*np.pi
+    ky = np.fft.fftfreq(ny, d=dy) * 2*np.pi
+
+    return kx, ky, Co_uv_2d
+
+def isotropic_cospectrum(Co_uv_2d, kx, ky, nbins=50):
+    """
+    Radial (isotropic) average of 2D cospectrum.
+    """
+
+    KX, KY = np.meshgrid(kx, ky)
+    k_mag = np.sqrt(KX**2 + KY**2)
+
+    k_flat = k_mag.ravel()
+    Co_flat = Co_uv_2d.ravel()
+
+    k_bins = np.linspace(0, k_flat.max(), nbins+1)
+    k_centers = 0.5 * (k_bins[:-1] + k_bins[1:])
+
+    Co_iso = np.zeros(nbins)
+
+    for i in range(nbins):
+        mask = (k_flat >= k_bins[i]) & (k_flat < k_bins[i+1])
+        if np.any(mask):
+            Co_iso[i] = np.mean(Co_flat[mask])
+
+    return k_centers, Co_iso
+
+from scipy.integrate import cumulative_trapezoid
+
+def cumulative_Iuv(k, Co_iso):
+    return cumulative_trapezoid(Co_iso, k, initial=0.0)
+# %%
+
+fnames=['/Users/simon/Code/CONFIGS/IB09_SZ/IB09_2D_TRC_Dcrit_WMPER_test/',
+        '/Users/simon/Code/CONFIGS/IB09_SZ/IB09_3D_TRC_Dcrit_WMPER_test/',
+        '/Users/simon/Code/CONFIGS/IB09_SZ/IB09_3D_MR_Dcrit/']
+
+plt.figure(dpi=300)
+for fname in fnames:
+    ds = nc.Dataset(fname+'rip_avg.nc')
+    time_fin = ds.variables['scrum_time'][-1]
+    h = ds.variables['h'][:]
+    ix0 = np.argmin(np.abs(h[0,:]))
+    xr = ds.variables['x_rho'][0,:]
+    xr = xr - xr[ix0]
+    ixSZ = np.argmin(np.abs(xr+80))
+    yr = ds.variables['y_rho'][:,0]
+    dx= xr[1]-xr[0]
+    yr = ds.variables['y_rho'][:,0]
+    zeta = ds.variables['zeta'][-1,:,:]
+    theta_s = ds.getncattr('theta_s')
+    theta_b = ds.getncattr('theta_b')
+    hc = ds.getncattr('hc')
+    N=10
+    zr=zlevs(h, zeta, theta_s, theta_b, hc, N, 'o', 2)
+
+    u = u2rho(ds.variables['u'][:,-1,:,:])
+    v = v2rho(ds.variables['v'][:,-1,:,:])
+    tpas = ds.variables['tpas01'][:,-1,:,:]
+
+    kx, ky, Co_uv = compute_cospectrum_2d(u[-1,:,ixSZ:ix0], tpas[-1,:,ixSZ:ix0], dx, dx, detrend=True)
+    k, Co_ut = isotropic_cospectrum(Co_uv, kx, ky,nbins=300)
+
+    kx, ky, Co_uv = compute_cospectrum_2d(u[-1,:,ixSZ:ix0], u[-1,:,ixSZ:ix0], dx, dx, detrend=True)
+    k, Co_uu = isotropic_cospectrum(Co_uv, kx, ky,nbins=300)
+
+    kx, ky, Co_uv = compute_cospectrum_2d(tpas[-1,:,ixSZ:ix0], tpas[-1,:,ixSZ:ix0], dx, dx, detrend=True)
+    k, Co_tt = isotropic_cospectrum(Co_uv, kx, ky,nbins=300)
+
+    coherence=Co_ut**2/(Co_uu*Co_tt)
+
+    #plt.semilogx(k,coherence,linewidth=0.2,color="gray",alpha=0.8)
+    plt.semilogx(k,smooth(coherence,5),linewidth=3)
+
+plt.legend(['2D TRC','3D TRC','3D MR'])
+plt.xlabel('Wavenumber (rad/m)')
+plt.ylabel('Coherence')
+plt.title('Coherence between u and T in the surfzone')
+plt.show()
+# Step 3: cumulative contribution
+#I_uv = cumulative_Iuv(k, Co_iso)
+# %%
+
+plt.figure(dpi=300)
+for fname in fnames:
+    ds = nc.Dataset(fname+'rip_avg.nc')
+    time_fin = ds.variables['scrum_time'][-1]
+    h = ds.variables['h'][:]
+    ix0 = np.argmin(np.abs(h[0,:]))
+    xr = ds.variables['x_rho'][0,:]
+    xr = xr - xr[ix0]
+    ixSZ = np.argmin(np.abs(xr+80))
+    yr = ds.variables['y_rho'][:,0]
+    dx= xr[1]-xr[0]
+    yr = ds.variables['y_rho'][:,0]
+    zeta = ds.variables['zeta'][-1,:,:]
+    theta_s = ds.getncattr('theta_s')
+    theta_b = ds.getncattr('theta_b')
+    hc = ds.getncattr('hc')
+    N=10
+    zr=zlevs(h, zeta, theta_s, theta_b, hc, N, 'o', 2)
+
+    u = u2rho(ds.variables['u'][:,-1,:,:])
+    v = v2rho(ds.variables['v'][:,-1,:,:])
+    tpas = ds.variables['tpas01'][:,-1,:,:]
+
+
+    coherence=0
+    Co_uu=0
+    Co_tt=0
+    Co_ut=0
+    for i in range(150,205):
+        kx, ky, Co_uv = compute_cospectrum_2d(u[i,:,ixSZ:ix0], tpas[i,:,ixSZ:ix0], dx, dx, detrend=True)
+        k, Co_uttmp = isotropic_cospectrum(Co_uv, kx, ky,nbins=300)
+        Co_ut=Co_ut+Co_uttmp
+        kx, ky, Co_uv = compute_cospectrum_2d(u[i,:,ixSZ:ix0], u[i,:,ixSZ:ix0], dx, dx, detrend=True)
+        k, Co_uutmp = isotropic_cospectrum(Co_uv, kx, ky,nbins=300)
+        Co_uu=Co_uu+Co_uutmp
+        kx, ky, Co_uv = compute_cospectrum_2d(tpas[i,:,ixSZ:ix0], tpas[i,:,ixSZ:ix0], dx, dx, detrend=True)
+        k, Co_tttmp = isotropic_cospectrum(Co_uv, kx, ky,nbins=300)
+        Co_tt=Co_tt+Co_tttmp
+        
+    Co_tt=Co_tt/(205-150)
+    Co_uu=Co_uu/(205-150)
+    Co_ut=Co_ut/(205-150)
+    coherence=Co_ut**2/(Co_uu*Co_tt)
+    #plt.semilogx(k,smooth(coherence,1),linewidth=0.5,color="gray",alpha=0.8)
+    plt.semilogx(k,smooth(coherence,5),linewidth=3)
+    
+plt.legend(['2D TRC','3D TRC','3D MR'])
+plt.xlabel('Wavenumber (rad/m)')
+plt.ylabel('Coherence')
+plt.title('Coherence between u and T in the surfzone')
+plt.ylim([0,0.5])
+plt.show()
+# %%
+import numpy as np
+import matplotlib.pyplot as plt
+
+# -----------------------------
+# 1. Grid
+# -----------------------------
+
+x = u[i,:,ixSZ:ix0]
+y = tpas[i,:,ixSZ:ix0]
+dx=dx
+nx, ny = np.shape(u[i,:,ixSZ:ix0])
+X, Y = np.meshgrid(x, y)
+
+# -----------------------------
+# 2. Example 2D fields
+# -----------------------------
+A = np.sin(2*np.pi*0.05*X)
+B = np.sin(2*np.pi*0.05*X + np.pi/4)
+
+# -----------------------------
+# 3. 2D FFTs
+# -----------------------------
+Ahat = np.fft.fft2(A)
+Bhat = np.fft.fft2(B)
+
+# -----------------------------
+# 4. Cross-spectrum P_AB(kx, ky)
+# -----------------------------
+PAB = Ahat * np.conj(Bhat)
+
+# -----------------------------
+# 5. Wavenumber grids
+# -----------------------------
+kx = 2*np.pi * np.fft.fftfreq(nx, dx)
+ky = 2*np.pi * np.fft.fftfreq(ny, dy)
+KX, KY = np.meshgrid(kx, ky)
+K = np.sqrt(KX**2 + KY**2)
+
+# -----------------------------
+# 6. Phase map arg(P_AB)
+# -----------------------------
+phase2D = np.angle(PAB)
+
+# -----------------------------
+# 7. Isotropic (radial) averaging
+# -----------------------------
+nbins = 50
+kbins = np.linspace(0, K.max(), nbins+1)
+kcenters = 0.5 * (kbins[:-1] + kbins[1:])
+
+phase_iso = np.zeros(nbins)
+
+for i in range(nbins):
+    mask = (K >= kbins[i]) & (K < kbins[i+1])
+    phase_iso[i] = np.nanmean(phase2D[mask])
+
+# -----------------------------
+# 8. Spatial lag Δx(k)
+# -----------------------------
+dx_iso = phase_iso / kcenters
+
+# -----------------------------
+# 9. Plots
+# -----------------------------
+plt.figure()
+plt.pcolormesh(KX, KY, phase2D, shading='auto')
+plt.xlabel("kx [rad/m]")
+plt.ylabel("ky [rad/m]")
+plt.title("2D Cross-Spectrum Phase arg(P_AB)")
+plt.colorbar(label="Phase [rad]")
+plt.show()
+
+plt.figure()
+plt.plot(kcenters, phase_iso)
+plt.xlabel("|k| [rad/m]")
+plt.ylabel("Isotropic Phase")
+plt.title("Isotropic Cross-Spectrum Phase")
+plt.grid(True)
+plt.show()
+
+plt.figure()
+plt.plot(kcenters, dx_iso)
+plt.xlabel("|k| [rad/m]")
+plt.ylabel("Spatial Lag Δx(k)")
+plt.title("Phase-Derived Spatial Shift")
+plt.grid(True)
+plt.show()
+
+
+# %%
+kx, ky, Co_uv = compute_cospectrum_2d(u[u.shape[0]-101,:,:], tpas[u.shape[0]-101,:,:], dx, dx, detrend=True)
+for i in range(u.shape[0]-100,u.shape[0]):
+    kx, ky, Co_uvtmp = compute_cospectrum_2d(u[i,:,:], tpas[i,:,:], dx, dx, detrend=True)
+    Co_uv = Co_uv + Co_uvtmp
+Co_uv = Co_uv/(100)
+k, Co_uutmp = isotropic_cospectrum(Co_uv, kx, ky,nbins=50)
+#%%
+plt.pcolormesh(kx,ky,Co_uv,shading="gouraud")
+plt.colorbar()
+plt.plot(-0.3*np.sqrt(-ky-0.1),ky,color="r",linestyle=":",linewidth=3)
+plt.clim([-0.1,0.1])
+plt.xlim([-1,1])
+plt.ylim([-1,1])
+plt.xlabel(r'$k_x$ [rad/m]')
+plt.ylabel(r'$k_y$ [rad/m]')
+plt.title(r'$k_x = -0.3 \sqrt{-k_y-0.1}$ ?? Mini-rips only here')
+plt.show()
+# %%
+plt.semilogx(k,Co_uutmp)
+plt.show()
+
+# %%
+kx, ky, Co_uv = compute_cospectrum_2d(u[u.shape[0]-101,:,:], u[u.shape[0]-101,:,:], dx, dx, detrend=True)
+for i in range(u.shape[0]-100,u.shape[0]):
+    kx, ky, Co_uvtmp = compute_cospectrum_2d(u[i,:,:], u[i,:,:], dx, dx, detrend=True)
+    Co_uv = Co_uv + Co_uvtmp
+Co_uv = Co_uv/(100)
+k, Co_uutmp = isotropic_cospectrum(Co_uv, kx, ky,nbins=50)
+#%%
+plt.pcolormesh(kx[-352:],ky,Co_uv[:,-352:],shading="gouraud")
+plt.colorbar()
+#plt.plot(-0.3*np.sqrt(-ky-0.1),ky,color="r",linestyle=":",linewidth=3)
+plt.clim([-0.1,0.1])
+plt.xlim([-1,1])
+plt.ylim([-1,1])
+plt.xlabel(r'$k_x$ [rad/m]')
+plt.ylabel(r'$k_y$ [rad/m]')
+#plt.title(r'$k_x = -0.3 \sqrt{-k_y-0.1}$ ?? Mini-rips only here')
+plt.show()
+
+#%%
+kx2D=kx;ky2d=ky;Co2D=Co_uv
+#%% Diagnostic Marie
+
+fnames=['/Users/simon/Code/CONFIGS/IB09_SZ/IB09_2D_TRC_Dcrit_WMPER_test/',
+        '/Users/simon/Code/CONFIGS/IB09_SZ/IB09_3D_TRC_Dcrit_WMPER_test/',
+        '/Users/simon/Code/CONFIGS/IB09_SZ/IB09_3D_MR_Dcrit/']
+names=['2D TRC','3D TRC','3D MR']; n=0
+
+plt.figure(dpi=300,figsize=(6,3))
+for fname in fnames:
+    ds = nc.Dataset(fname+'rip_avg.nc')
+    h = ds.variables['h'][:]
+    ix0 = np.argmin(np.abs(h[0,:]))
+    xr = ds.variables['x_rho'][0,:]
+    xr = xr - xr[ix0]
+    ixSZ = np.argmin(np.abs(xr+80))
+    yr = ds.variables['y_rho'][:,0]
+    dx= xr[1]-xr[0]
+    yr = ds.variables['y_rho'][:,0]
+
+    u = u2rho(ds.variables['u'][:,-1,:,:])
+    v = v2rho(ds.variables['v'][:,-1,:,:])
+    tpas = ds.variables['tpas01'][:,-1,:,:]
+    istart = next((i for i, x in enumerate(np.sum(tpas,axis=(1,2))) if x), None)
+    
+    tpas1 = tpas[istart,:,ixSZ:ix0].ravel()
+    tpas1 = tpas1/np.max(tpas1)
+    tpas2 = tpas[istart+150,:,ixSZ:ix0].ravel()
+    tpas2 = tpas2/np.max(tpas2)
+    time_fin = np.round(ds.variables['scrum_time'][istart+170])
+
+    initialtext="Initial"
+    plt.plot(np.sort(tpas1),color='gray',linestyle='--')
+    plt.plot(np.sort(tpas2),linewidth=3,alpha=0.8,label=names[n])
+    n=n+1
+plt.xlabel('Number of grid points [-]')
+plt.ylabel('Normalized tracer concentration [-]')
+plt.title(f'Sorted tracer concentration in the surf zone after {time_fin} s', loc='left')
+#plt.legend(['Original tracer injection','2D TRC',"",'3D TRC',"",'3D MR'])
+plt.legend()
+plt.show()
+
 # %%
