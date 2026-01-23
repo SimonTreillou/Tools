@@ -8,6 +8,7 @@ from . import useful
 # compute_rms_vorticity: Compute RMS of vorticity budget terms.
 # compute_vorticity: Compute vorticity from velocity fields.
 # compute_horizontal_shear_term: Compute RANS horizontal shear-production term.
+# compute_Q_components: Compute Q-criterion components from velocity fields.
 # enstrophy_spectrum: Compute isotropic wavenumber spectrum of enstrophy.
 # load_vorticity_budget: Load vorticity budget terms from file.
 # ---------------------------------------------------------------
@@ -243,6 +244,62 @@ def compute_horizontal_shear_term(config,
 
     return shear_prod
 
+
+def compute_Q_components(ut, vt, wt, dx, dy, dz3):
+    """
+    Compute Q-criterion components from velocity fields.
+
+    The Q-criterion is used to identify vortex cores. Q is the second invariant
+    of the velocity gradient tensor. Positive Q indicates vortex-dominated regions.
+
+    Parameters
+    ----------
+    ut, vt, wt : 3D array
+        Velocity components with shape (N, M, L) representing (z, y, x).
+    dx, dy : float
+        Grid spacing in x and y directions.
+    dz3 : float
+        Grid spacing in z direction.
+
+    Returns
+    -------
+    Q : 3D array
+        Q-criterion (second invariant of velocity gradient tensor).
+    Qx, Qy, Qz : 3D array
+        Individual components of Q in x, y, z directions.
+    """
+    # Compute all spatial derivatives of velocity components
+    duy, duz, dux = useful.gradients_3d(ut)
+    dvy, dvz, dvx = useful.gradients_3d(vt)
+    dwy, dwz, dwx = useful.gradients_3d(wt)
+
+    # Scale spatial derivatives by grid spacing to get actual derivatives
+    dux = dux / dx
+    dvy = dvy / dy
+    dwz = dwz / dz3
+    duy = duy / dy
+    dvx = dvx / dx
+    duz = duz / dz3
+    dvz = dvz / dz3
+    dwy = dwy / dy
+    dwx = dwx / dx
+
+    # Q-criterion: Q = -0.5 * (S_ij*S_ij + Omega_ij*Omega_ij)
+    # where S is strain rate and Omega is rotation rate tensors
+    Q = -0.5 * (
+        (dux ** 2) + (dvy ** 2) + (dwz ** 2)
+        + 2 * duy * dvx
+        + 2 * duz * dwx
+        + 2 * dvz * dwy
+    )
+    
+    # Q-criterion components (directional contributions)
+    Qx = -duz * dwx - 0.5 * (dux ** 2)
+    Qy = -dvz * dwy - 0.5 * (dvy ** 2)
+    Qz = -duy * dvx - 0.5 * (dwz ** 2)
+
+    return Q, Qx, Qy, Qz
+
 def enstrophy_spectrum(omega, dx, dy):
     """
     Compute isotropic wavenumber spectrum of enstrophy.
@@ -338,4 +395,3 @@ def load_vorticity_budget(repo_path, region=None):
     }
     ds.close()
     return terms
-

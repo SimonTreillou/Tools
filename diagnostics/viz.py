@@ -2,13 +2,42 @@ from matplotlib.colors import LightSource
 import matplotlib.colors as mcolors
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage.measure import marching_cubes
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
+# isosurface_vertices: Compute isosurface vertices and faces using marching cubes.
 # plot_3D: Create a 3D surface plot of a 3D variable over a bathymetric domain.
 # plot_bar_simple: Simple, robust bar plot with sensible defaults and comments.
+# plot_isosurface: Compute & plot an isosurface of Qx using vertical interpolation, marching cubes, and matplotlib.
 # plot_stack_fraction: Stacked bar plot of fractional contributions.
-# ---------------------------------------------------------------
 
+def isosurface_vertices(volume, level, spacing):
+    """
+    Compute vertices and faces of an isosurface using scikit-image's marching cubes.
+
+    Parameters
+    - volume: 3D numpy array
+    - level: isosurface value
+    - spacing: voxel spacing as (sx, sy, sz)
+
+    Returns
+    - verts, faces: arrays suitable for 3D surface rendering
+    """
+    volume = np.asarray(volume)
+    if volume.ndim != 3:
+        raise ValueError("volume must be a 3D array")
+
+    # Normalize spacing to a 3-tuple
+    if spacing is None:
+        spacing = (1.0, 1.0, 1.0)
+    elif np.isscalar(spacing):
+        spacing = (float(spacing),) * 3
+    else:
+        spacing = tuple(float(s) for s in spacing)
+
+    verts, faces, _, _ = marching_cubes(volume=volume, level=level, spacing=spacing)
+    return verts, faces
 
 def plot_3D(xr,yr,zr,h,zeta,data,
             name=None,units=None,vmin=None,vmax=None,cmap='RdBu_r',
@@ -304,6 +333,179 @@ def plot_bar_simple(names, values, title="", ylabel="", vmin=None, vmax=None,
     plt.show()
 
     return fig, ax
+
+
+def plot_isosurface(Qx, xr, yr, zr, iso_value,
+                          h=None,                  # (Ny, Nx) bathy depth (positive down)
+                          plot_bathy=True,
+                          bathy_stride=4,
+                          Nz_out=None, zmin=None, zmax=None,
+                          xmin=None, xmax=None, ymin=None, ymax=None,
+                          z_positive_up=True,
+                          base_color=[189, 20, 8],
+                          elev=30, azim=130):
+    """
+    Compute & plot an isosurface of Qx using:
+      - vertical interpolation from terrain-following zr -> regular z-levels
+      - marching cubes
+      - matplotlib Poly3DCollection
+      + optional bathymetry surface
+
+    Qx: (Nz, Ny, Nx)
+    zr: (Nz, Ny, Nx) physical z (same order as Qx)
+    xr: (Nx,), yr: (Ny,)
+    h : (Ny, Nx) bathymetry depth (positive down) [optional]
+    """
+
+    Nz, Ny, Nx = Qx.shape
+    dx = float(xr[1] - xr[0])
+    dy = float(yr[1] - yr[0])
+
+    # --- 1) Build regular z-levels (Cartesian) ---
+    if zmin is None: zmin = np.nanmin(zr)
+    if zmax is None: zmax = np.nanmax(zr)
+    if xmin is None: xmin = np.nanmin(xr)
+    if xmax is None: xmax = np.nanmax(xr)
+    if ymin is None: ymin = np.nanmin(yr)
+    if ymax is None: ymax = np.nanmax(yr)
+    if Nz_out is None: Nz_out = Nz * 2  # finer z-grid helps marching cubes
+
+    z_levels = np.linspace(zmin, zmax, Nz_out)  # ascending
+
+    # --- 2) Interpolate Qx(zr) -> Qx(z_levels) column-by-column ---
+    Qreg = np.full((Nz_out, Ny, Nx), np.nan, dtype=float)
+
+    for j in range(Ny):
+        for i in range(Nx):
+            zcol = zr[:, j, i]
+            qcol = Qx[:, j, i]
+
+            m = np.isfinite(zcol) & np.isfinite(qcol)
+            if m.sum() < 2:
+                continue
+
+            zc = zcol[m]
+            qc = qcol[m]
+
+            idx = np.argsort(zc)
+            zc = zc[idx]
+            qc = qc[idx]
+
+            Qreg[:, j, i] = np.interp(z_levels, zc, qc, left=np.nan, right=np.nan)
+
+    # marching_cubes needs finite values: set NaNs to a value far away
+    Qwork = Qreg.copy()
+    nan_mask = ~np.isfinite(Qwork)
+    if np.any(~nan_mask):
+        finite_min = np.nanmin(Qwork)
+        Qwork[nan_mask] = finite_min - 1e6
+    else:
+        raise ValueError("All values are NaN after interpolation.")
+
+    # --- 3) Marching cubes on a REGULAR grid ---
+    dz = float(z_levels[1] - z_levels[0])
+    verts, faces, normals, values = marching_cubes(
+        Qwork, level=iso_value, spacing=(dz, dy, dx)
+    )
+    # Compute per-face normals (average of the 3 vertex normals)
+    face_normals = normals[faces].mean(axis=1)
+
+    # Convert verts to physical coordinates
+    x0 = float(xr[0])
+    y0 = float(yr[0])
+    z0 = float(z_levels[0])
+
+    Z = verts[:, 0] + z0
+    Y = verts[:, 1] + y0
+    X = verts[:, 2] + x0
+
+    XYZ = np.c_[X, Y, Z]
+    tri = np.stack([XYZ[faces[:, 0]], XYZ[faces[:, 1]], XYZ[faces[:, 2]]], axis=1)
+
+    # --- 4) Plot with matplotlib ---
+    fig = plt.figure(figsize=(9, 7),dpi=300)
+    ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
+
+    # --- Shading for isosurface (rollers) ---
+    ls = LightSource(azdeg=90, altdeg=20)
+
+    # Light direction (unit vector)
+    light_dir = ls.direction  # shape (3,)
+
+    # Normalize face normals
+    fn = face_normals.copy()
+    fn /= np.linalg.norm(fn, axis=1)[:, None]
+
+    # Lambertian shading: dot(n, light_dir)
+    intensity = np.dot(fn, light_dir)
+    intensity = np.clip(intensity, 0.3, 1.0)
+
+    # Map to grayscale or a colormap
+    # Here: bluish rollers
+    base_color = np.array(base_color)/255  # RGB
+    facecolors = intensity[:, None] * base_color[None, :]
+
+    mesh = Poly3DCollection(tri, linewidths=0.0, alpha=0.9)
+    mesh.set_facecolor(facecolors)     # <-- shaded rollers
+    mesh.set_edgecolor('none')
+    mesh.set_linewidth(0.0)
+    mesh.set_zorder(20)
+    mesh.set_antialiased(False) 
+    ax.add_collection3d(mesh)
+
+    # --- 5) Bathymetry overlay ---
+    if plot_bathy and (h is not None):
+        if h.shape != (Ny, Nx):
+            raise ValueError(f"h must have shape (Ny,Nx)={(Ny,Nx)}, got {h.shape}")
+
+        X2, Y2 = np.meshgrid(xr, yr)  # (Ny,Nx)
+
+        # If z is positive upward, bottom is negative (zb=-h). If z positive downward, zb=+h.
+        zb = (-h) if z_positive_up else (h)
+
+        bathy = ax.plot_surface(
+            X2[::bathy_stride, ::bathy_stride],
+            Y2[::bathy_stride, ::bathy_stride],
+            zb[::bathy_stride, ::bathy_stride],
+            rstride=30, cstride=30, linewidth=0, alpha=0.8,
+            color=np.array([235, 143, 5])/255, antialiased=True, shade=True
+        )
+        bathy.set_zorder(0)
+
+    ax.xaxis.set_rotate_label(False)
+    ax.yaxis.set_rotate_label(False)
+    ax.set_xlabel("x [m]",fontsize=11,rotation=0)
+    ax.set_ylabel("y [m]",fontsize=11)
+    ax.xaxis.set_label_coords(0.5, -1.33)
+    ax.yaxis.set_label_coords(1.05, 0.5)
+    ax.set_zlabel("")
+    ax.text2D(0.98, 0.67, "Depth [m]", transform=ax.transAxes,
+            rotation=0, va="center", ha="left", fontsize=11)
+    # Improve spacing so it is not clipped
+    ax.tick_params(axis='z', pad=5)
+    ax.zaxis.set_major_locator(plt.MaxNLocator(5))
+
+    # Set limits
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    # Make sure zlim includes bathy if present
+    zlo = z_levels.min()
+    zhi = z_levels.max()
+    if plot_bathy and (h is not None):
+        zb_min = np.nanmin(((-h) if z_positive_up else (h)))
+        zb_max = np.nanmax(((-h) if z_positive_up else (h)))
+        zlo = min(zlo, zb_min)
+        zhi = max(zhi, zb_max)
+    ax.set_zlim(zmin, zmax)
+    
+    # Set view angle
+    ax.view_init(elev=elev,azim=azim) #30,130
+    
+    # Set aspect ratio
+    ax.set_box_aspect((90/110, 1.0, 0.2))
+    fig.tight_layout()
+    return fig, ax, (verts, faces), (X, Y, Z), z_levels, Qreg
+
 
 def plot_stack_fraction(data, names, t=None, figsize=(12,6), cmap='tab10',
                         normalize=True, smooth=None, alpha=0.95,

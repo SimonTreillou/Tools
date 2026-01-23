@@ -12,7 +12,10 @@ from scipy.signal import convolve2d
 # compute_coarse_grained_field: Coarse-grain a 2D field using circular top-hat convolution.
 # save_plot: Save a Matplotlib figure to disk, ensuring the target directory exists.
 # find_file: Search for and return the path to a file in a directory with a specified suffix.
+# gradients_3d: Compute gradients of a 3D field along (y,z,x) axes.
+# normalize_volume: Normalize a 3D volume to the range [-1, 1].
 # compute_flux_term: Compute the flux term <var1' * var2'> from two variables.
+# regrid_uniform_z: Interpolate a 3D field defined on terrain-following z to uniform z-axis.
 # smooth: Smooth an array using a moving average filter with convolution.
 # wave_average: Compute the average of a 3D array over a specified time window.
 # ---------------------------------------------------------------
@@ -213,6 +216,50 @@ def find_file(repo_path, suffix="_his.nc"):
 
     return matches[0]
 
+def gradients_3d(field, dz=1.0, dy=1.0, dx=1.0, edge_order=2):
+    """
+    Compute gradients of a 3D field with shape (N, M, L) = (z, y, x).
+e field shape is (N, M, L)
+    Parameters
+    ----------
+    field : ndarray
+        3D array with axes (z, y, x).
+    dz, dy, dx : float or 1D array, optional
+        Spacings for each axis. Can be scalars or 1D arrays of lengths N, M, L.
+    edge_order : {1, 2}, optional
+        Gradient edge scheme used by numpy.gradient.
+
+    Returns
+    -------
+    dfdy, dfdz, dfdx : ndarray
+        Gradients returned in the order (y, z, x) to match downstream naming.
+    """
+    field = np.asarray(field)
+    if field.ndim != 3:
+        raise ValueError("field must be 3D with shape (N, M, L) = (z, y, x).")
+
+    dfdz, dfdy, dfdx = np.gradient(field, dz, dy, dx, edge_order=edge_order)
+    return dfdy, dfdz, dfdx
+
+def normalize_volume(vol):
+    """
+    Normalize an array to [-1, 1] by dividing by its maximum absolute finite value.l))
+    Preserves NaNs. Returns float array. If all values are NaN or the max abs is 0,r m == 0:
+    returns the input unchanged.
+    """
+    arr = np.asarray(vol, dtype=float)
+    try:
+        m = np.nanmax(np.abs(arr))
+    except (ValueError, RuntimeError):
+        # All-NaN input or reduction failed; return unchanged
+        return arr
+    if not np.isfinite(m) or m == 0:
+        return arr
+    out = arr / m
+    # Clamp potential numerical overshoot
+    out = np.clip(out, -1.0, 1.0)
+    return out
+
 def save_plot(path, namefig, fig=None, ext="png", dpi=300,
               transparent=False, bbox_inches="tight", facecolor="white",
               verbose=False):
@@ -295,6 +342,75 @@ def smooth(x,L):
     res[0]=res[1]
     res[-1]=res[-2]
     return res
+
+def regrid_uniform_z(Z, V, Nz=None):
+    """
+    Interpolate a 3D field V(N, M, L), defined on a terrain-following vertical
+    coordinate Z(N, M, L), onto a uniform, 1D z-axis to enable operations like
+    marching-cubes isosurface extraction.
+
+    Parameters
+    ----------
+    Z : array_like, shape (N, M, L)
+        Terrain-following vertical coordinate for each column.
+        Expected to be monotonic (ideally strictly increasing) along the N axis
+        for each (j, i) column. Non-monotonic inputs may cause np.interp to fail.
+    V : array_like, shape (N, M, L)
+        Variable defined on Z to be interpolated to a uniform z-axis.
+    Nz : int, optional
+        Number of uniform vertical levels. Defaults to N (the length of the
+        vertical axis in V/Z).
+
+    Returns
+    -------
+    Vz : ndarray, shape (Nz, M, L)
+        Field interpolated onto the uniform vertical axis.
+    z_uniform : ndarray, shape (Nz,)
+        The uniform vertical coordinate spanning [nanmin(Z), nanmax(Z)].
+
+    Notes
+    -----
+    - np.interp requires the x-coordinates (Z column) to be increasing. If a
+      column is decreasing or non-monotonic, np.interp may raise an error.
+      Pre-sorting or enforcing monotonicity may be necessary upstream.
+    - Out-of-range values are extrapolated to the edge values by np.interp.
+      If extrapolation is undesirable, consider masking those regions before use.
+    - NaNs in V are filled by nearest-neighbor along the vertical index to
+      allow interpolation; columns that are entirely NaN yield NaNs in Vz.
+    """
+    N, M, L = V.shape
+    if Nz is None:
+        Nz = N
+
+    # Build uniform z spanning the global min/max of Z (ignoring NaNs)
+    zmin = float(np.nanmin(Z))
+    zmax = float(np.nanmax(Z))
+    z_uniform = np.linspace(zmin, zmax, Nz)
+
+    # Allocate output (float for interpolation results)
+    Vz = np.empty((Nz, M, L), dtype=float)
+
+    # Loop over horizontal columns
+    for j in range(M):
+        for i in range(L):
+            # Extract vertical profiles for this column
+            zcol = np.asarray(Z[:, j, i])
+            vcol = np.asarray(V[:, j, i])
+
+            # Fill NaNs in V via nearest-neighbor along the vertical index.
+            # If the entire column is NaN, propagate NaNs.
+            if np.any(~np.isfinite(vcol)):
+                mask = np.isfinite(vcol)
+                if not np.any(mask):
+                    Vz[:, j, i] = np.nan
+                    continue
+                vcol = np.interp(np.arange(N), np.flatnonzero(mask), vcol[mask])
+
+            # Interpolate to uniform z.
+            # Assumes zcol is monotonic increasing; otherwise np.interp may fail.
+            Vz[:, j, i] = np.interp(z_uniform, zcol, vcol)
+
+    return Vz, z_uniform
 
 def wave_average(var,dt=1,T=13):
     """
