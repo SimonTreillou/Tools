@@ -6,6 +6,7 @@ from . import useful
 # check_budget_closure: Check vorticity budget closure.
 # compute_dUdz: Compute vertical derivative dU/dz for 3D/4D fields.
 # compute_rms_vorticity: Compute RMS of vorticity budget terms.
+# compute_Helmholtz_decomposition: Decompose velocity field into rotational and irrotational components.
 # compute_vorticity: Compute vorticity from velocity fields.
 # compute_horizontal_shear_term: Compute RANS horizontal shear-production term.
 # compute_Q_components: Compute Q-criterion components from velocity fields.
@@ -147,6 +148,118 @@ def compute_rms_vorticity(terms, axis=(1, 2, 3)):
     rms_rate = np.sqrt(np.mean(terms['rate']**2, axis=axis))
 
     return rms_rhs, rms_rate
+
+
+def compute_Helmholtz_decomposition(u, v, dx, dy):
+    """Decompose a velocity field into rotational and irrotational components.
+    
+    Solves Helmholtz decomposition to separate a 2D velocity field into 
+    divergence-free (rotational) and curl-free (irrotational) parts using 
+    the relationship: u*i^ + v*j^ = grad(phi) + curl(psi)
+    
+    The velocity potential (phi) represents irrotational flow and the stream 
+    function (psi) represents rotational flow. Assumes zero velocity at x 
+    boundaries and solves Laplace's equation using FFT in the y-direction 
+    with tridiagonal matrix inversion for x-direction coupling.
+    
+    Note: The tridiag function is defined in the useful module.
+    
+    Parameters
+    ----------
+    u : ndarray
+        3D array of u-velocity component with shape (nt, ny, nx)
+        where nt is number of time steps, ny is y-dimension, nx is x-dimension
+    v : ndarray
+        3D array of v-velocity component with shape (nt, ny, nx)
+    dx : float
+        Grid spacing in x-direction
+    dy : float
+        Grid spacing in y-direction
+    
+    Returns
+    -------
+    u_psi : ndarray
+        u-velocity component from stream function (rotational part)
+    v_psi : ndarray
+        v-velocity component from stream function (rotational part)
+    u_phi : ndarray
+        u-velocity component from velocity potential (irrotational part)
+    v_phi : ndarray
+        v-velocity component from velocity potential (irrotational part)
+    
+    References
+    ----------
+    Original implementation from Emma Shie Nuss (https://github.com/emmashie/funpy)
+    """
+    ### set up dimenional values
+    [ny, nx] = u[0,:,:].shape
+    Ly = ny*dy
+    Lx = nx*dx
+
+    ### take spatial derivatives 
+    ux = np.gradient(u, dx, axis=2)
+    uy = np.gradient(u, dy, axis=1)
+    vx = np.gradient(v, dx, axis=2)
+    vy = np.gradient(v, dy, axis=1)
+    vbar = np.mean(np.mean(v, axis=-1), axis=-1)
+    ubar = np.mean(np.mean(u, axis=-1), axis=-1)
+    psi_at_lx = vbar*Lx 
+    phi_at_lx = ubar*Lx 
+    del u, v 
+
+    divu = ux + vy ## forcing for the velocity potential 
+    divu[:,:,-1] = divu[:,:,-1] - np.expand_dims(phi_at_lx, axis=-1)/dx**2
+    curlu = vx - uy ## forcing for the streamfunction 
+    curlu[:,:,-1] = curlu[:,:,-1] - np.expand_dims(psi_at_lx, axis=-1)/dx**2
+    del ux, uy, vx, vy 
+
+    ### solve Laplaces's equation using fft in y
+    un_diag = 1/dx**2 
+    alpha = un_diag*np.ones(nx)
+    on_diag = -2/dx**2 
+    beta = on_diag*np.ones(nx)
+    beta_noflux = beta.copy() 
+    beta_noflux[-1] = 2/dx**2
+    ov_diag = 1/dx**2
+    gamma = alpha.copy() 
+    gamma_noflux = gamma.copy()
+    gamma_noflux[0] = 2/dx**2 
+
+    Gpsi = np.fft.fftshift(np.fft.fftn(curlu, axes=[1]), axes=[1])
+    Gphi = np.fft.fftshift(np.fft.fftn(divu, axes=[1]), axes=[1])
+
+    del curlu, divu
+
+    kpos = np.arange(0, ny/2)
+    kneg = np.arange(-ny/2, 0)
+    N = np.fft.fftshift(np.append(kpos, kneg))
+
+    Xpsi = np.zeros(Gpsi.shape, dtype=complex)
+    Xphi = np.zeros(Gphi.shape, dtype=complex)
+
+    for a in range(ny):
+        c = -4*np.pi**2*N[a]**2/Ly**2
+        g = Gpsi[:,a,:]
+        Xpsi[:,a,:] = useful.tridiag(alpha, beta+c, gamma, g)
+        g = Gphi[:,a,:]
+        Xphi[:,a,:] = useful.tridiag(alpha, beta+c, gamma_noflux, g)
+
+    psi0 = np.fft.ifft(np.fft.ifftshift(Xpsi, axes=[1]), axis=1)
+    u_psi = -np.gradient(psi0.real, dy, axis=1)
+    u_psi = np.append(np.expand_dims(u_psi[:,-1,:], axis=1), u_psi[:,:-1,:], axis=1)
+    psi = psi0.copy()
+    psi[:,:,0] = np.zeros(psi[:,:,0].shape)
+    psi[:,:,-1] = np.ones(psi[:,:,-1].shape)*np.expand_dims(psi_at_lx, axis=-1)
+    v_psi = np.gradient(psi.real, dx, axis=2)
+    del Xpsi
+
+    phi = np.fft.ifft(np.fft.fftshift(Xphi, axes=[1]), axis=1)
+    del Xphi
+    phi[:,:,-1] = np.ones(phi[:,:,-1].shape)*np.expand_dims(phi_at_lx, axis=-1)
+    u_phi = np.gradient(phi.real, dx, axis=2)
+    v_phi = np.gradient(phi.real, dy, axis=1)
+    return u_psi, v_psi, u_phi, v_phi 
+
 
 def compute_vorticity(varx,vary,dx,dy):
     """

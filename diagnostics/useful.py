@@ -17,6 +17,7 @@ from scipy.signal import convolve2d
 # compute_flux_term: Compute the flux term <var1' * var2'> from two variables.
 # regrid_uniform_z: Interpolate a 3D field defined on terrain-following z to uniform z-axis.
 # smooth: Smooth an array using a moving average filter with convolution.
+# tridiag: Solve a tridiagonal linear system using the Thomas algorithm.
 # wave_average: Compute the average of a 3D array over a specified time window.
 # ---------------------------------------------------------------
 
@@ -342,6 +343,56 @@ def smooth(x,L):
     res[0]=res[1]
     res[-1]=res[-2]
     return res
+
+
+def tridiag(alpha, beta, gamma, b):
+        """
+        Solve a tridiagonal linear system Ax = b using the Thomas algorithm.
+        
+        This function performs forward elimination followed by back substitution
+        to efficiently solve tridiagonal systems without forming the full matrix.
+        
+        Parameters
+        ----------
+        alpha : array_like
+            Lower diagonal elements (length N-1).
+        beta : array_like
+            Main diagonal elements (length N).
+        gamma : array_like
+            Upper diagonal elements (length N-1).
+        b : ndarray, shape (M, N)
+            Right-hand side vector(s); can be 2D to solve multiple systems.
+        
+        Returns
+        -------
+        x : ndarray, shape (M, N), dtype=complex
+            Solution vector(s) to the tridiagonal system.
+        
+        Notes
+        -----
+        - This implementation uses the Thomas algorithm (a.k.a. TDMA).
+        - Input arrays are modified in-place during the forward elimination phase.
+        - Output is complex-valued to handle potential complex arithmetic.
+        
+        References
+        ----------
+        Original implementation from Emma Shie Nuss (https://github.com/emmashie/funpy)
+        """
+        N = len(b[0, :])
+
+        # Forward elimination: reduce to upper triangular form
+        for i in range(1, N):
+            coeff = alpha[i - 1] / beta[i - 1]
+            beta[i] = beta[i] - coeff * gamma[i - 1]
+            b[:, i] = b[:, i] - coeff * b[:, i - 1]
+
+        # Back substitution: solve for x from bottom to top
+        x2 = np.zeros(b.shape, dtype=complex)
+        x2[:, N - 1] = b[:, N - 1] / beta[N - 1]
+        for i in range(N - 2, -1, -1):
+            x2[:, i] = (b[:, i] - np.expand_dims(gamma[i], axis=0) * x2[:, i + 1]) / beta[i]
+
+        return x2
 
 def regrid_uniform_z(Z, V, Nz=None):
     """
