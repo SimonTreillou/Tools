@@ -1,5 +1,3 @@
-from scipy.signal import welch, csd
-from scipy.signal.windows import hann
 import numpy as np
 from scipy import signal,stats
 from typing import Optional, Tuple, Dict
@@ -11,6 +9,8 @@ from typing import Optional, Tuple, Dict
 # spectrum: Compute the power spectrum of a signal using Welch's method.
 # welch_spectrum_CI: Compute power spectrum with confidence intervals using Welch's method.
 # compute_psd: Compute Power Spectral Density with confidence intervals.
+# compute_psd_2d: Compute 2D Welch power spectral density.
+# convert_2Dpsd_to_1D: Compute radially averaged 1D spectrum from 2D spectrum.
 # compute_csd: Compute Cross-Spectral Density.
 # calculate_dof: Calculate degrees of freedom for Welch's method.
 # confidence_interval: Calculate confidence intervals for spectrum estimate.
@@ -301,6 +301,184 @@ def compute_psd(
                          confidence=confidence, **kwargs)
 
 
+def compute_psd_2d(data, fs=1.0, nperseg=None, noverlap=None, window='hann') -> Dict:
+    """
+    Compute 2D Welch power spectral density
+    
+    Parameters:
+    -----------
+    data : 2D array
+        Input data (ny, nx)
+    fs : float or tuple
+        Sampling frequency (same for both dims or (fs_y, fs_x))
+    nperseg : int or tuple
+        Length of each segment
+    noverlap : int or tuple
+        Number of points to overlap
+    """
+    ny, nx = data.shape
+    
+    # Handle sampling frequencies
+    if np.isscalar(fs):
+        fs_y, fs_x = fs, fs
+    else:
+        fs_y, fs_x = fs
+    
+    # Set default segment length
+    if nperseg is None:
+        nperseg_y = ny // 8
+        nperseg_x = nx // 8
+    elif np.isscalar(nperseg):
+        nperseg_y = nperseg_x = nperseg
+    else:
+        nperseg_y, nperseg_x = nperseg
+    
+    # Set default overlap
+    if noverlap is None:
+        noverlap_y = nperseg_y // 2
+        noverlap_x = nperseg_x // 2
+    elif np.isscalar(noverlap):
+        noverlap_y = noverlap_x = noverlap
+    else:
+        noverlap_y, noverlap_x = noverlap
+    
+    # Create window
+    if isinstance(window, str):
+        win_y = signal.get_window(window, nperseg_y)
+        win_x = signal.get_window(window, nperseg_x)
+        window_2d = np.outer(win_y, win_x)
+    else:
+        window_2d = window
+    
+    # Calculate step sizes
+    step_y = nperseg_y - noverlap_y
+    step_x = nperseg_x - noverlap_x
+    
+    # Calculate number of segments
+    n_segments_y = (ny - noverlap_y) // step_y
+    n_segments_x = (nx - noverlap_x) // step_x
+    
+    # Initialize PSD accumulator
+    psd = np.zeros((nperseg_y, nperseg_x))
+    n_averages = 0
+    
+    # Loop through segments
+    for i in range(n_segments_y):
+        for j in range(n_segments_x):
+            y_start = i * step_y
+            x_start = j * step_x
+            
+            # Extract segment
+            segment = data[y_start:y_start+nperseg_y, 
+                          x_start:x_start+nperseg_x]
+            
+            # Apply window
+            segment_windowed = segment * window_2d
+            
+            # Compute 2D FFT
+            fft_segment = np.fft.fft2(segment_windowed)
+            
+            # Add power to accumulator
+            psd += np.abs(fft_segment)**2
+            n_averages += 1
+    
+    # Average
+    psd /= n_averages
+    
+    # Normalize by window power
+    window_power = np.sum(window_2d**2)
+    psd /= window_power
+    
+    # Create frequency arrays
+    freq_y = np.fft.fftfreq(nperseg_y, d=1/fs_y)
+    freq_x = np.fft.fftfreq(nperseg_x, d=1/fs_x)
+    
+    # Shift to center zero frequency
+    psd = np.fft.fftshift(psd)
+    freq_y = np.fft.fftshift(freq_y)
+    freq_x = np.fft.fftshift(freq_x)
+    
+    result = {
+        'freqs_x': freq_x,
+        'freqs_y': freq_y,
+        'spectrum': psd,
+        'params': {
+            'fs': fs,
+            'nperseg': nperseg,
+            'noverlap': noverlap,
+            'window': window
+        }
+    }
+    return result
+
+
+def convert_2Dpsd_to_1D(res, nbins=None, mode='mean'):
+    """
+    Compute radially averaged 1D spectrum from 2D spectrum
+    
+    Parameters:
+    -----------
+    res : Dict
+        Output from compute_psd_2d containing 'freqs_x', 'freqs_y', and 'spectrum'
+    nbins : int
+        Number of radial bins (default: auto)
+    mode : str
+        'mean', 'median', or 'sum'
+    
+    Returns:
+    --------
+    res : Dict
+        Contains:
+        - 'freqs_radial': Radial frequency bins
+        - 'spectrum_radial': Radially averaged PSD
+        - 'std_radial': Standard deviation in each bin
+    """
+    # Create 2D frequency grid
+    FY, FX = np.meshgrid(res['freqs_y'], res['freqs_x'], indexing='ij')
+    freq_mag = np.sqrt(FX**2 + FY**2)
+    
+    # Determine number of bins
+    if nbins is None:
+        nbins = int(np.min(res['spectrum'].shape) / 2)
+    
+    # Create bin edges
+    freq_max = np.max(freq_mag)
+    bin_edges = np.linspace(0, freq_max, nbins + 1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    psd_radial = np.zeros(nbins)
+    psd_std = np.zeros(nbins)
+    counts = np.zeros(nbins)
+    
+    # Bin the 2D spectrum
+    for i in range(nbins):
+        mask = (freq_mag >= bin_edges[i]) & (freq_mag < bin_edges[i+1])
+        values = res['spectrum'][mask]
+        
+        if len(values) > 0:
+            if mode == 'mean':
+                psd_radial[i] = np.mean(values)
+            elif mode == 'median':
+                psd_radial[i] = np.median(values)
+            elif mode == 'sum':
+                psd_radial[i] = np.sum(values)
+            
+            psd_std[i] = np.std(values)
+            counts[i] = len(values)
+    
+    # Remove empty bins
+    valid = counts > 0
+    
+    # Store in Dict
+    res = {
+        'freqs_radial': bin_centers[valid],
+        'spectrum_radial': psd_radial[valid],
+        'std_radial': psd_std[valid],
+    }
+    
+    return res
+
+
 def compute_csd(
     x: np.ndarray,
     y: np.ndarray,
@@ -480,38 +658,6 @@ def compute_phase(
         'params': csd['params']
     }
     
-
-
-def compute_cospectrum_quadspectrum(x, z, fs, nperseg=None):
-    """
-    Compute co-spectrum and quad-spectrum between two signals using Welch's method.
-
-    Parameters
-    ----------
-    x : array-like
-        First input time series.
-    z : array-like
-        Second input time series.
-    fs : float
-        Sampling frequency in Hz.
-    nperseg : int, optional
-        Length of each segment for Welch's method (default: determined by scipy).
-
-    Returns
-    -------
-    f : ndarray
-        Array of frequency bins.
-    Cxz : ndarray
-        Co-spectrum (real part of cross-spectral density).
-    Qxz : ndarray
-        Quad-spectrum (imaginary part of cross-spectral density).
-    """
-    f, Pxy = csd(x, z, fs=fs, nperseg=nperseg)
-    Cxz = np.real(Pxy)
-    Qxz = np.imag(Pxy)
-    return f, Cxz, Qxz
-
-    
 def compute_transfer_function(
     x: np.ndarray,
     y: np.ndarray,
@@ -588,3 +734,32 @@ def spectrum(var, dt, N=256, along=False):
 def welch_spectrum_CI(x, fs, nperseg=256, noverlap=None, alpha=0.05):
     result = compute_psd(x, fs=fs, nperseg=nperseg, noverlap=noverlap, confidence=1-alpha)
     return result['freqs'], result['spectrum'], result['dof'], result['ci_lower'], result['ci_upper']
+
+def compute_cospectrum_quadspectrum(x, z, fs, nperseg=None):
+    """
+    Compute co-spectrum and quad-spectrum between two signals using Welch's method.
+
+    Parameters
+    ----------
+    x : array-like
+        First input time series.
+    z : array-like
+        Second input time series.
+    fs : float
+        Sampling frequency in Hz.
+    nperseg : int, optional
+        Length of each segment for Welch's method (default: determined by scipy).
+
+    Returns
+    -------
+    f : ndarray
+        Array of frequency bins.
+    Cxz : ndarray
+        Co-spectrum (real part of cross-spectral density).
+    Qxz : ndarray
+        Quad-spectrum (imaginary part of cross-spectral density).
+    """
+    f, Pxy = signal.csd(x, z, fs=fs, nperseg=nperseg)
+    Cxz = np.real(Pxy)
+    Qxz = np.imag(Pxy)
+    return f, Cxz, Qxz
