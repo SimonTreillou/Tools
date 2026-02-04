@@ -1,4 +1,5 @@
 import numpy as np
+from . import spectrum
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # energy_spectrum : Compute isotropic kinetic energy spectrum from 2D velocity field

@@ -2,8 +2,6 @@ from scipy.signal import welch, csd
 from scipy.signal.windows import hann
 import numpy as np
 from scipy import signal,stats
-from scipy.stats import chi2
-import matplotlib.pyplot as plt
 from typing import Optional, Tuple, Dict
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
