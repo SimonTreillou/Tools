@@ -7,10 +7,12 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # isosurface_vertices: Compute isosurface vertices and faces using marching cubes.
+# plot_CIbar_loglog: Plot a confidence interval bar on a log-log power spectrum plot.
 # plot_3D: Create a 3D surface plot of a 3D variable over a bathymetric domain.
 # plot_bar_simple: Simple, robust bar plot with sensible defaults and comments.
 # plot_isosurface: Compute & plot an isosurface of Qx using vertical interpolation, marching cubes, and matplotlib.
 # plot_stack_fraction: Stacked bar plot of fractional contributions.
+# ---------------------------------------------------------------
 
 def isosurface_vertices(volume, level, spacing):
     """
@@ -39,6 +41,49 @@ def isosurface_vertices(volume, level, spacing):
     verts, faces, _, _ = marching_cubes(volume=volume, level=level, spacing=spacing)
     return verts, faces
 
+def plot_CIbar_loglog(f, S, ci_upper, color='k', x_pos=None, y_pos=None, lw=3):
+    """
+    Plot a confidence interval (CI) bar on a log-log power spectrum plot.
+
+    Parameters
+    ----------
+    f : array-like
+        Frequency array.
+    S : array-like
+        Power spectral density array.
+    ci_upper : float
+        Upper bound multiplier for the confidence interval (from welch_spectrum_CI).
+    color : str, optional
+        Color of the CI bar (default: 'k' for black).
+    x_pos : float, optional
+        X position (frequency) for the CI bar. Defaults to 80% of max frequency.
+    y_pos : float, optional
+        Y position (PSD) for the CI bar. Defaults to 80% of max PSD value.
+    lw : int, optional
+        Line width of the CI bar (default: 3).
+
+    Notes
+    -----
+    The CI bar is drawn vertically at x_pos, centered at y_pos, with height determined by ci_upper.
+    Intended for use on log-log plots.
+    """
+    if x_pos is None:
+        x_pos = f[-1] * 0.8  # near top-right, 80% of max freq
+    if y_pos is None:
+        y_center = max(S) * 0.8  # position around the top of PSD curve
+    else:
+        y_center = y_pos
+    # CI width (half height in log10 units)
+    ci_half = ci_upper * S[0]  # same everywhere
+
+    # Draw the bar (vertical line)
+    plt.vlines(x=x_pos, ymin=y_center - ci_half, ymax=y_center + ci_half,
+               colors=color, linewidth=lw)
+
+    # Add small horizontal “caps”
+    plt.hlines([y_center - ci_half, y_center + ci_half],
+               x_pos * 0.95, x_pos * 1.05, colors=color, linewidth=lw)
+    
 def plot_3D(xr,yr,zr,h,zeta,data,
             name=None,units=None,vmin=None,vmax=None,cmap='RdBu_r',
             angle1=30,angle2=120,norm='linear'):
