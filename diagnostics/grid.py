@@ -1,5 +1,4 @@
 import numpy as np
-from netCDF4 import Dataset
 
 # -------------- LIST OF FUNCTIONS IN THIS MODULE --------------
 # csf: Compute stretching curves for vertical coordinates.
