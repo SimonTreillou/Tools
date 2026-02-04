@@ -2,10 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as nc
-from scipy import signal
-import pandas as pd
 import sys
-from matplotlib.colors import LogNorm
 sys.path.append('..')
 from diagnostics.grid import zlevs, u2rho, v2rho
 from diagnostics.vorticity import compute_Helmholtz_decomposition
@@ -82,4 +79,3 @@ axs[1,2].set_xlabel(r'x [m]')
 plt.tight_layout()
 plt.show()
 
-# %%
