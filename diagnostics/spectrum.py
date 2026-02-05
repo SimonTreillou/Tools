@@ -471,9 +471,9 @@ def convert_2Dpsd_to_1D(res, nbins=None, mode='mean'):
     
     # Store in Dict
     res = {
-        'freqs_radial': bin_centers[valid],
-        'spectrum_radial': psd_radial[valid],
-        'std_radial': psd_std[valid],
+        'freqs': bin_centers[valid],
+        'spectrum': psd_radial[valid],
+        'std': psd_std[valid],
     }
     
     return res
