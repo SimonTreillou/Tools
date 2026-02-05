@@ -42,12 +42,12 @@ for config,name in zip(configs,names):
                     confidence=0.95)
     
     print('--- '+name+' ---')
-    print("Variance of v is "+str(v[it,:,ix].var()))
-    print("Integral of spectrum is "+str(np.trapz(res['spectrum'], res['freqs'])))
-    print('Ratio is '+str(v[it,:,ix].var() / np.trapz(res['spectrum'], res['freqs'])))
+    print("Variance of v is       :  "+str(v[it,:,ix].var()))
+    print("Integral of spectrum is:  "+str(np.trapz(res['spectrum'], res['freqs'])))
+    print('Ratio is               :  '+str(v[it,:,ix].var() / np.trapz(res['spectrum'], res['freqs'])))
 
     plt.loglog(res['freqs'], res['spectrum'], label=name, color=colors[str(names.index(name))],linewidth=2)
-    plt.fill_between(res['freqs'], res['ci_lower'], res['ci_upper'], alpha=0.1,color=colors[str(names.index(name))],label='')
+    plt.fill_between(res['freqs'], res['spectrum']*res['ci_lower'], res['spectrum']*res['ci_upper'], alpha=0.1,color=colors[str(names.index(name))],label='')
 
 plt.fill_between([1e-1],[2,3],color='gray',alpha=0.1,label='95% CI')
 plt.xlabel('Wavenumber [1/m]') 
