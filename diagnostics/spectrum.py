@@ -412,7 +412,7 @@ def compute_psd_2d(data, fs=1.0, nperseg=None, noverlap=None, window='hann') -> 
     return result
 
 
-def convert_2Dpsd_to_1D(res, nbins=None, mode='mean'):
+def convert_2Dpsd_to_1D(res, nbins=None, mode='sum'):
     """
     Compute radially averaged 1D spectrum from 2D spectrum
     
@@ -445,6 +445,7 @@ def convert_2Dpsd_to_1D(res, nbins=None, mode='mean'):
     freq_max = np.max(freq_mag)
     bin_edges = np.linspace(0, freq_max, nbins + 1)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    bin_widths = np.diff(bin_edges)
     
     psd_radial = np.zeros(nbins)
     psd_std = np.zeros(nbins)
@@ -465,6 +466,11 @@ def convert_2Dpsd_to_1D(res, nbins=None, mode='mean'):
             
             psd_std[i] = np.std(values)
             counts[i] = len(values)
+    
+    # CRITICAL: Divide by bin width to get spectral DENSITY
+    # This makes units consistent: [energy] / [1/m] = [m³/s²] / [1/m]
+    psd_radial = psd_radial / bin_widths
+    psd_std = psd_std / bin_widths
     
     # Remove empty bins
     valid = counts > 0
